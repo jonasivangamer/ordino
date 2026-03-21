@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Ordino</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;font-family:'Segoe UI',sans-serif}
@@ -297,8 +299,29 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     <button class="nav-btn nav-btn-logout" onclick="logout()">Logout</button>
   </div>
   <div id="browseMain">
-    <div class="browse-section-title">🎮 All Games</div>
+    <div class="browse-section-title">🎮 Games</div>
     <div id="gamesGrid"></div>
+  </div>
+</div>
+
+<!-- ── PUBLISH MODAL ── -->
+<div id="publishModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.82);align-items:center;justify-content:center">
+  <div style="background:#1e1e2e;border-radius:16px;padding:28px 32px;width:min(340px,92vw);text-align:center;box-shadow:0 12px 50px rgba(0,0,0,.7)">
+    <h2 style="color:#fff;margin:0 0 6px;font-size:1.2rem">Publish Game</h2>
+    <p style="color:rgba(255,255,255,.45);font-size:.8rem;margin:0 0 22px">Who can see and play your game?</p>
+    <div style="display:flex;gap:12px">
+      <button onclick="doPublish('private')" style="flex:1;padding:16px 10px;background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.18);border-radius:12px;color:#fff;cursor:pointer;transition:.2s">
+        <div style="font-size:1.8rem;margin-bottom:6px">🔒</div>
+        <div style="font-weight:700;font-size:.95rem">Private</div>
+        <div style="color:rgba(255,255,255,.4);font-size:.72rem;margin-top:4px">Only you can see it</div>
+      </button>
+      <button onclick="doPublish('public')" style="flex:1;padding:16px 10px;background:rgba(76,175,80,.12);border:2px solid rgba(76,175,80,.4);border-radius:12px;color:#fff;cursor:pointer;transition:.2s">
+        <div style="font-size:1.8rem;margin-bottom:6px">🌍</div>
+        <div style="font-weight:700;font-size:.95rem;color:#66bb6a">Public</div>
+        <div style="color:rgba(255,255,255,.4);font-size:.72rem;margin-top:4px">Everyone can play it</div>
+      </button>
+    </div>
+    <button onclick="document.getElementById('publishModal').style.display='none'" style="margin-top:14px;padding:8px 20px;background:none;border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.45);cursor:pointer;font-size:.8rem">Cancel</button>
   </div>
 </div>
 
@@ -589,38 +612,111 @@ function showBrowse() {
   document.getElementById('settingsBtn').style.display = 'none';
   document.getElementById('backToBrowseBtn').style.display = 'none';
   renderGamesGrid();
+  cloudLoadGames();
 }
+
+let cloudGames = []; // games loaded from Gun cloud
 
 function renderGamesGrid() {
   const grid = document.getElementById('gamesGrid');
-  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const localGames = JSON.parse(localStorage.getItem('bw_games') || '[]');
   grid.innerHTML = '';
 
-  if (games.length === 0) {
-    grid.innerHTML = '<div class="browse-empty">No games yet! Click <strong>+ Create Game</strong> to make the first one.</div>';
-    return;
+  // My Games section
+  const myGames = localGames.filter(g => g.author === currentUser);
+  if (myGames.length > 0) {
+    const sec = document.createElement('div');
+    sec.innerHTML = '<div class="browse-section-title" style="margin:0 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">📁 My Games</div>';
+    grid.appendChild(sec);
+    myGames.forEach((g) => {
+      const idx = localGames.indexOf(g);
+      grid.appendChild(makeGameCard(g, idx, 'local'));
+    });
   }
 
-  games.forEach((g, idx) => {
-    const card = document.createElement('div');
-    card.className = 'game-card';
-    const bg = THUMB_COLORS[idx % THUMB_COLORS.length];
-    const badge = g.multiplayer
-      ? `<span class="game-card-badge badge-multi">👥 ${g.maxPlayers}p</span>`
-      : `<span class="game-card-badge badge-single">🎮 1P</span>`;
+  // Community Games section (from cloud)
+  const communityGames = cloudGames.filter(cg => cg.author !== currentUser);
+  if (communityGames.length > 0) {
+    const sec2 = document.createElement('div');
+    sec2.innerHTML = '<div class="browse-section-title" style="margin:18px 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">🌍 Community Games</div>';
+    grid.appendChild(sec2);
+    communityGames.forEach((g, ci) => {
+      grid.appendChild(makeGameCard(g, ci, 'cloud'));
+    });
+  }
+
+  if (myGames.length === 0 && communityGames.length === 0) {
+    grid.innerHTML = '<div class="browse-empty">No games yet! Click <strong>+ Create Game</strong> to make the first one.</div>';
+  }
+
+  // Also show other users' local games (same browser)
+  const otherLocal = localGames.filter(g => g.author !== currentUser);
+  if (otherLocal.length > 0) {
+    const sec3 = document.createElement('div');
+    sec3.innerHTML = '<div class="browse-section-title" style="margin:18px 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">👤 Other Local Games</div>';
+    grid.appendChild(sec3);
+    otherLocal.forEach(g => {
+      const idx = localGames.indexOf(g);
+      grid.appendChild(makeGameCard(g, idx, 'local'));
+    });
+  }
+}
+
+function makeGameCard(g, idx, source) {
+  const card = document.createElement('div');
+  card.className = 'game-card';
+  const bg = THUMB_COLORS[idx % THUMB_COLORS.length];
+  const mpBadge = g.multiplayer
+    ? `<span class="game-card-badge badge-multi">👥 ${g.maxPlayers}p</span>`
+    : `<span class="game-card-badge badge-single">🎮 1P</span>`;
+  const visBadge = g.visibility === 'public'
+    ? '<span class="game-card-badge" style="background:rgba(76,175,80,.7)">🌍</span>'
+    : '<span class="game-card-badge" style="background:rgba(255,255,255,.2)">🔒</span>';
+  const isOwner = g.author === currentUser;
+  if (source === 'cloud') {
     card.innerHTML = `
-      <div class="game-card-thumb" style="background:${bg}">${badge}🎮</div>
+      <div class="game-card-thumb" style="background:${bg}">${mpBadge}${visBadge}🎮</div>
+      <div class="game-card-body">
+        <div class="game-card-name">${escHtml(g.name)}</div>
+        <div class="game-card-author">by ${escHtml(g.author)}</div>
+        <div class="game-card-actions">
+          <button class="card-btn card-btn-play" onclick="playCloudGame(${idx})">▶ Play</button>
+        </div>
+      </div>`;
+  } else {
+    card.innerHTML = `
+      <div class="game-card-thumb" style="background:${bg}">${mpBadge}${visBadge}🎮</div>
       <div class="game-card-body">
         <div class="game-card-name">${escHtml(g.name)}</div>
         <div class="game-card-author">by ${escHtml(g.author)}</div>
         <div class="game-card-actions">
           <button class="card-btn card-btn-play" onclick="playGame(${idx})">▶ Play</button>
-          ${g.author===currentUser ? `<button class="card-btn card-btn-edit" onclick="editGame(${idx})">✏️ Edit</button>` : ''}
-          ${g.author===currentUser ? `<button class="card-btn card-btn-delete" onclick="deleteGame(${idx})">🗑️ Delete</button>` : ''}
+          ${isOwner ? `<button class="card-btn card-btn-edit" onclick="editGame(${idx})">✏️ Edit</button>` : ''}
+          ${isOwner ? `<button class="card-btn card-btn-delete" onclick="deleteGame(${idx})">🗑️ Delete</button>` : ''}
         </div>
       </div>`;
-    grid.appendChild(card);
-  });
+  }
+  return card;
+}
+
+function playCloudGame(idx) {
+  const g = cloudGames.filter(cg => cg.author !== currentUser)[idx];
+  if (!g) return;
+  currentGameIdx = -1;
+  loadGameSettings(g);
+  if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
+  document.getElementById('browseScreen').style.display = 'none';
+  document.getElementById('settingsBtn').style.display = 'block';
+  document.getElementById('backToBrowseBtn').style.display = 'block';
+  showMobileControls();
+  showChat();
+  if (g.multiplayer) {
+    mpShowOverlay();
+  } else {
+    initWorld();
+    lastTime = performance.now();
+    gameAF = requestAnimationFrame(gameLoop);
+  }
 }
 
 function deleteGame(idx) {
@@ -634,6 +730,73 @@ function deleteGame(idx) {
 }
 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ════════════════════════════════════════════════════════
+//  CLOUD (Gun.js — decentralized game sharing)
+// ════════════════════════════════════════════════════════
+const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
+const cloudDB = gun.get('ordino-public-games-v1');
+
+function cloudPublish(gameData) {
+  const id = gameData.author + '_' + gameData.name.replace(/\s+/g,'_').toLowerCase() + '_' + Date.now();
+  // Gun can't store arrays directly, so serialize sprites/blocks as JSON strings
+  const cloudEntry = {
+    id,
+    name: gameData.name,
+    author: gameData.author,
+    multiplayer: !!gameData.multiplayer,
+    maxPlayers: gameData.maxPlayers || 1,
+    speed: gameData.speed,
+    gravity: gameData.gravity,
+    jumpHeight: gameData.jumpHeight,
+    mapType: gameData.mapType,
+    spawnX: gameData.spawnX,
+    spawnY: gameData.spawnY,
+    mapW: gameData.mapW,
+    mapH: gameData.mapH,
+    bgType: gameData.bgType || 'animation',
+    bgAnimPreset: gameData.bgAnimPreset || 'night',
+    publishedAt: gameData.publishedAt || Date.now(),
+    spritesJSON: JSON.stringify(gameData.sprites || []),
+    blocksJSON: JSON.stringify(gameData.blocks || []),
+  };
+  cloudDB.get(id).put(cloudEntry);
+}
+
+function cloudLoadGames() {
+  cloudGames = [];
+  cloudDB.map().once(function(data, key) {
+    if (!data || !data.name) return;
+    try {
+      const g = {
+        name: data.name,
+        author: data.author,
+        multiplayer: !!data.multiplayer,
+        maxPlayers: data.maxPlayers || 1,
+        speed: data.speed || 4,
+        gravity: data.gravity || 0.55,
+        jumpHeight: data.jumpHeight || 13,
+        mapType: data.mapType || 'ground',
+        spawnX: data.spawnX || 50,
+        spawnY: data.spawnY || 128,
+        mapW: data.mapW || 800,
+        mapH: data.mapH || 450,
+        bgType: data.bgType || 'animation',
+        bgAnimPreset: data.bgAnimPreset || 'night',
+        visibility: 'public',
+        publishedAt: data.publishedAt || 0,
+        sprites: JSON.parse(data.spritesJSON || '[]'),
+        blocks: JSON.parse(data.blocksJSON || '[]'),
+        _cloudId: key,
+      };
+      // Avoid duplicates
+      if (!cloudGames.find(cg => cg._cloudId === key)) {
+        cloudGames.push(g);
+        renderGamesGrid();
+      }
+    } catch(e) {}
+  });
+}
 
 let currentGameIdx = -1;
 
@@ -764,13 +927,22 @@ function onMultiChange() {
 function publishGame() {
   const gs = readGameSettings();
   if (!gs.name) { showToast('⚠️ Please enter a game name!'); return; }
-  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  document.getElementById('publishModal').style.display = 'flex';
+}
+
+function doPublish(visibility) {
+  document.getElementById('publishModal').style.display = 'none';
+  const gs = readGameSettings();
   const gameData = {
     ...gs,
     author: currentUser,
     sprites: JSON.parse(JSON.stringify(sprites)),
     blocks: getScriptBlocksData(),
+    visibility: visibility,
+    publishedAt: Date.now(),
   };
+  // Always save locally
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
   if (currentGameIdx >= 0 && games[currentGameIdx] && games[currentGameIdx].author === currentUser) {
     games[currentGameIdx] = gameData;
   } else {
@@ -778,7 +950,13 @@ function publishGame() {
     currentGameIdx = games.length - 1;
   }
   localStorage.setItem('bw_games', JSON.stringify(games));
-  showToast('🚀 Game published: ' + gs.name);
+  // If public, also push to Gun cloud
+  if (visibility === 'public') {
+    cloudPublish(gameData);
+    showToast('🌍 Published publicly: ' + gs.name);
+  } else {
+    showToast('🔒 Published privately: ' + gs.name);
+  }
 }
 
 // ════════════════════════════════════════════════════════
