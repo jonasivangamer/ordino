@@ -2213,30 +2213,35 @@ const sCtx=stageCanvas.getContext('2d');
 
 function drawStage() {
   const W=276, H=180;
+  // Scale factor: stage pixels per game pixel
+  const sx = W / mapW, sy = H / mapH;
   drawBg(sCtx, W, H, performance.now());
 
   // Platforms — use same makePlatforms logic scaled to stage size
   const stagePlats = makePlatforms(W, H);
   for (const p of stagePlats) {
     sCtx.fillStyle=p.color; sCtx.fillRect(p.x,p.y,p.w,p.h);
-    // No detail on stage ground
   }
 
-  // Draw each sprite — Spawn shows as a green flag, others at real sprW×sprH size
+  // Draw each sprite scaled to match how it appears in the actual game
   sprites.forEach((spr, i) => {
     if(!spr.visible) return;
-    const pw = spr.sprW || 16, ph = spr.sprH || 16;
+    const pw = (spr.sprW || 16) * sx, ph = (spr.sprH || 16) * sy;
+    const rawW = spr.sprW || 16, rawH = spr.sprH || 16;
+    // Sprite stage position: spr.x/spr.y are in stage coords (276×180)
+    // but we want them to represent game coords scaled down
+    // spr.x is already in stage coords, so game pos = spr.x / sx
+    // Drawing at stage coords with scaled size:
     if(spr.name === 'Spawn') {
       drawSpawnMarker(sCtx, spr.x, spr.y);
     } else if(spr.isGround) {
-      // Ground sprite — render as full-width strip at its actual height
       const gH = ph;
       const gY = spr.y - gH;
       sCtx.save();
       if (spr.pixels && spr.pixels.some(c => c)) {
         const tileW = pw;
         for (let tx = 0; tx < W; tx += tileW) {
-          drawSpritePixels(sCtx, spr.pixels, tx, gY, tileW, gH, pw);
+          drawSpritePixels(sCtx, spr.pixels, tx, gY, tileW, gH, rawW);
         }
       } else {
         sCtx.fillStyle = '#888888';
@@ -2246,7 +2251,7 @@ function drawStage() {
     } else {
       sCtx.save();
       if (spr.pixels && spr.pixels.some(c => c)) {
-        drawSpritePixels(sCtx, spr.pixels, spr.x - pw/2, spr.y - ph, pw, ph, pw);
+        drawSpritePixels(sCtx, spr.pixels, spr.x - pw/2, spr.y - ph, pw, ph, rawW);
       } else {
         sCtx.fillStyle = '#9e9e9e';
         sCtx.fillRect(spr.x - pw/2, spr.y - ph, pw, ph);
@@ -2271,8 +2276,8 @@ function drawStage() {
     }
 
     // Name label + size
-    const nameLabel = spr.isGround ? spr.name : spr.name;
-    const sizeLabel = pw + '×' + ph;
+    const nameLabel = spr.name;
+    const sizeLabel = rawW + '×' + rawH;
     sCtx.font='7px Segoe UI';
     const nlW = Math.max(sCtx.measureText(nameLabel).width + 8, 32);
     const slW = sCtx.measureText(sizeLabel).width + 6;
@@ -2280,12 +2285,10 @@ function drawStage() {
     const totalW = showSize ? nlW + slW + 2 : nlW;
     const lx = spr.isGround ? W/2 - totalW/2 : spr.x - totalW/2;
     const ly = spr.isGround ? spr.y - ph - 14 : spr.y - ph - 14;
-    // Name bg
     sCtx.fillStyle='rgba(0,0,0,0.55)'; sCtx.beginPath();
     sCtx.roundRect(lx, ly, nlW, 12, 3); sCtx.fill();
     sCtx.fillStyle='#fff'; sCtx.textAlign='center';
     sCtx.fillText(nameLabel, lx + nlW/2, ly + 9);
-    // Size badge (only for selected)
     if(showSize) {
       sCtx.fillStyle='rgba(124,77,255,0.7)'; sCtx.beginPath();
       sCtx.roundRect(lx + nlW + 2, ly, slW, 12, 3); sCtx.fill();
@@ -2294,6 +2297,17 @@ function drawStage() {
     }
     sCtx.textAlign='left';
   });
+
+  // Map size indicator (bottom-right corner)
+  const mapLabel = mapW + '×' + mapH;
+  sCtx.font = 'bold 7px Segoe UI,sans-serif';
+  const mlW = sCtx.measureText(mapLabel).width + 10;
+  sCtx.fillStyle = 'rgba(0,0,0,0.5)';
+  sCtx.beginPath(); sCtx.roundRect(W - mlW - 4, H - 16, mlW, 13, 3); sCtx.fill();
+  sCtx.fillStyle = 'rgba(255,255,255,0.7)';
+  sCtx.textAlign = 'center';
+  sCtx.fillText('🗺 ' + mapLabel, W - mlW/2 - 4, H - 6);
+  sCtx.textAlign = 'left';
 }
 
 // ── Stage sprite drag ──
@@ -2305,7 +2319,7 @@ function stagePointerDown(e) {
   const my = (e.clientY - rect.top) * scaleY;
   for (let i = 0; i < sprites.length; i++) {
     const s = sprites[i]; if(!s.visible) continue;
-    const pw = s.sprW||16, ph = s.sprH||16;
+    const pw = (s.sprW||16) * (276/mapW), ph = (s.sprH||16) * (180/mapH);
     if (mx >= s.x-pw/2 && mx <= s.x+pw/2 && my >= s.y-ph && my <= s.y) {
       stageDragIdx = i; stageDragOX = mx - s.x; stageDragOY = my - s.y;
       selectedSprite = i; e.preventDefault(); return;
