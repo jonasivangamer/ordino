@@ -1,0 +1,2587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ordino</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;overflow:hidden;font-family:'Segoe UI',sans-serif}
+canvas{display:block}
+
+/* ── AUTH ── */
+#authScreen{position:fixed;inset:0;z-index:2000;background:linear-gradient(135deg,#0d0d2b 0%,#1a1245 50%,#2a0d3a 100%);display:flex;align-items:center;justify-content:center;flex-direction:column}
+.auth-logo{font-size:2.8rem;font-weight:900;color:#fff;letter-spacing:.04em;margin-bottom:6px;text-shadow:0 0 30px rgba(140,80,255,.6)}
+.auth-logo span{color:#ff8c00}
+.auth-tagline{color:rgba(255,255,255,.5);font-size:.9rem;margin-bottom:28px}
+.auth-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(12px);border-radius:16px;padding:30px 34px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.auth-field{margin-bottom:14px}
+.auth-field label{display:block;font-size:.8rem;color:rgba(255,255,255,.6);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em}
+.auth-field input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:8px;padding:10px 13px;color:#fff;font-size:.95rem;outline:none;transition:.2s}
+.auth-field input:focus{border-color:#8c50ff;background:rgba(140,80,255,.1)}
+.auth-submit{width:100%;padding:11px;background:linear-gradient(135deg,#8c50ff,#ff8c00);border:none;border-radius:8px;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;margin-top:8px;transition:.2s}
+.auth-submit:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.auth-error{color:#fff;font-size:.88rem;font-weight:600;margin-top:10px;text-align:center;min-height:20px;background:rgba(255,80,80,.25);border:1px solid rgba(255,80,80,.5);border-radius:7px;padding:7px 10px;display:none}
+.auth-error.visible{display:block}
+
+/* ── BROWSE ── */
+#browseScreen{position:fixed;inset:0;z-index:1800;background:#0f0f1a;display:none;flex-direction:column}
+#browseNav{background:rgba(0,0,0,.5);border-bottom:1px solid rgba(255,255,255,.08);padding:0 20px;height:54px;display:flex;align-items:center;gap:14px;flex-shrink:0;backdrop-filter:blur(8px)}
+.nav-logo{font-size:1.3rem;font-weight:900;color:#fff;flex:1}
+.nav-logo span{color:#ff8c00}
+.nav-user{color:rgba(255,255,255,.7);font-size:.88rem}
+.nav-btn{padding:7px 16px;border:none;border-radius:7px;font-size:.85rem;font-weight:700;cursor:pointer;transition:.15s}
+.nav-btn-create{background:linear-gradient(135deg,#ff8c00,#ff5722);color:#fff}
+.nav-btn-create:hover{filter:brightness(1.15)}
+.nav-btn-logout{background:rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
+.nav-btn-logout:hover{background:rgba(255,255,255,.2);color:#fff}
+#browseMain{flex:1;overflow-y:auto;padding:24px;scrollbar-width:thin;scrollbar-color:#444 #0f0f1a}
+.browse-section-title{color:rgba(255,255,255,.8);font-size:1.1rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.browse-section-title::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.1)}
+#gamesGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px}
+.game-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.09);border-radius:12px;overflow:hidden;cursor:pointer;transition:.2s;position:relative}
+.game-card:hover{transform:translateY(-3px);border-color:rgba(140,80,255,.4);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.game-card-thumb{height:110px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;position:relative}
+.game-card-badge{position:absolute;top:8px;right:8px;padding:3px 8px;border-radius:20px;font-size:.7rem;font-weight:700;color:#fff}
+.badge-single{background:#2196f3}
+.badge-multi{background:#4caf50}
+.game-card-body{padding:10px 12px}
+.game-card-name{color:#fff;font-size:.95rem;font-weight:700;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.game-card-author{color:rgba(255,255,255,.45);font-size:.75rem;margin-bottom:10px}
+.game-card-actions{display:flex;gap:6px}
+.card-btn{flex:1;padding:6px 0;border:none;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer;transition:.15s}
+.card-btn-play{background:#7c4dff;color:#fff}
+.card-btn-play:hover{background:#6a3de8}
+.card-btn-edit{background:rgba(255,255,255,.12);color:rgba(255,255,255,.8)}
+.card-btn-edit:hover{background:rgba(255,255,255,.2)}
+.card-btn-delete{background:rgba(220,50,50,.18);color:#ff8a8a}
+.card-btn-delete:hover{background:rgba(220,50,50,.4)}
+.browse-empty{text-align:center;color:rgba(255,255,255,.3);padding:40px 0;font-size:.95rem;grid-column:1/-1}
+
+/* ── GAME ── */
+#gameScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+#gameCanvas{max-width:100%;max-height:100%;object-fit:contain}
+#mpPlayersBadge{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:100;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:4px 14px;color:#fff;font-size:.78rem;font-weight:600;display:none;backdrop-filter:blur(6px)}
+#settingsBtn{position:fixed;top:12px;right:12px;z-index:100;background:rgba(255,255,255,.15);border:none;border-radius:50%;width:40px;height:40px;font-size:20px;cursor:pointer;color:#fff;transition:.2s;display:none}
+#settingsBtn:hover{background:rgba(255,255,255,.3)}
+#backToBrowseBtn{position:fixed;top:12px;left:12px;z-index:100;background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:7px 14px;font-size:.82rem;cursor:pointer;color:#fff;transition:.2s;display:none}
+#backToBrowseBtn:hover{background:rgba(255,255,255,.3)}
+
+/* Modal */
+#settingsModal{display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+#settingsModal.open{display:flex}
+.modal-panel{background:linear-gradient(135deg,#2a1a4e,#1a1a3a);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:28px 32px;min-width:320px;color:#fff;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.modal-panel h2{margin-bottom:22px;font-size:1.4rem;text-align:center;letter-spacing:.05em}
+.setting-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.setting-row label{font-size:.95rem;opacity:.9}
+.toggle{position:relative;width:46px;height:26px}
+.toggle input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#555;border-radius:13px;cursor:pointer;transition:.3s}
+.slider:before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.3s}
+input:checked+.slider{background:#7c4dff}
+input:checked+.slider:before{transform:translateX(20px)}
+select.setting-select{background:#333;color:#fff;border:1px solid #555;border-radius:6px;padding:4px 8px;font-size:.9rem}
+.modal-btn{width:100%;padding:10px;border:none;border-radius:8px;font-size:1rem;cursor:pointer;margin-top:8px;font-weight:600;transition:.2s}
+.studio-btn{background:linear-gradient(135deg,#ff8c00,#ff5722);color:#fff}
+.studio-btn:hover{filter:brightness(1.15)}
+.close-btn{background:rgba(255,255,255,.1);color:#fff}
+.close-btn:hover{background:rgba(255,255,255,.2)}
+
+/* Toast */
+#toast{position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-60px);background:#333;color:#fff;padding:10px 22px;border-radius:20px;font-size:.95rem;z-index:500;transition:transform .3s;pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0)}
+
+/* ── CHAT ── */
+#chatBox{position:fixed;bottom:16px;left:16px;width:290px;z-index:150;display:none;flex-direction:column;gap:5px}
+#chatLog{max-height:170px;overflow-y:auto;display:flex;flex-direction:column;gap:3px;scrollbar-width:thin;scrollbar-color:#555 transparent}
+#chatLog::-webkit-scrollbar{width:4px}
+#chatLog::-webkit-scrollbar-thumb{background:#555;border-radius:2px}
+.chat-msg{background:rgba(0,0,0,.62);backdrop-filter:blur(6px);border-radius:8px;padding:5px 10px;font-size:.8rem;color:#fff;animation:chatIn .18s ease;border-left:3px solid rgba(255,140,0,.7)}
+.chat-msg .chat-name{font-weight:800;color:#ff8c00;margin-right:5px}
+.chat-msg.chat-self{border-left-color:rgba(140,80,255,.8)}
+.chat-msg.chat-self .chat-name{color:#b388ff}
+@keyframes chatIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+#chatForm{display:flex;gap:6px}
+#chatInput{flex:1;background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.18);border-radius:9px;padding:7px 11px;color:#fff;font-size:.82rem;outline:none;backdrop-filter:blur(8px);transition:.2s}
+#chatInput:focus{border-color:#ff8c00;background:rgba(0,0,0,.7)}
+#chatInput::placeholder{color:rgba(255,255,255,.3);font-size:.78rem}
+#chatSendBtn{background:linear-gradient(135deg,#ff8c00,#ff5722);border:none;border-radius:9px;color:#fff;padding:7px 13px;cursor:pointer;font-size:.88rem;transition:.15s;flex-shrink:0}
+#chatSendBtn:hover{filter:brightness(1.15)}
+#chatToggleBtn{position:fixed;bottom:16px;right:16px;z-index:150;background:rgba(0,0,0,.55);border:1.5px solid rgba(255,255,255,.2);border-radius:50%;width:42px;height:42px;font-size:20px;cursor:pointer;color:#fff;display:none;transition:.2s;backdrop-filter:blur(6px)}
+#chatToggleBtn:hover{background:rgba(255,140,0,.4);border-color:#ff8c00}
+
+/* ── STUDIO ── */
+#studioScreen{display:none;position:fixed;inset:0;background:#1e1e1e;flex-direction:column;z-index:1500}
+#studioScreen.open{display:flex}
+#studioHeader{background:#e6820a;display:flex;align-items:center;padding:0 14px;height:48px;gap:10px;flex-shrink:0}
+#studioHeader .logo{font-size:1.1rem;font-weight:700;color:#fff;flex:1}
+.hdr-btn{padding:6px 14px;border:none;border-radius:6px;font-size:.9rem;font-weight:700;cursor:pointer;transition:.15s}
+#runBtn{background:#4caf50;color:#fff}#runBtn:hover{background:#43a047}
+#stopBtn{background:#e53935;color:#fff}#stopBtn:hover{background:#c62828}
+#backBtn{background:rgba(255,255,255,.2);color:#fff}#backBtn:hover{background:rgba(255,255,255,.35)}
+#publishBtn{background:linear-gradient(135deg,#8c50ff,#ff8c00);color:#fff}#publishBtn:hover{filter:brightness(1.15)}
+#studioBody{display:flex;flex:1;overflow:hidden}
+
+/* Palette */
+#palette{width:220px;background:#2a2a2a;display:flex;flex-direction:column;border-right:2px solid #111;flex-shrink:0}
+#catTabs{display:flex;flex-wrap:wrap;gap:3px;padding:6px}
+.cat-tab{flex:1 0 calc(50% - 3px);padding:5px 0;border:none;border-radius:5px;font-size:.75rem;font-weight:700;cursor:pointer;color:#fff;opacity:.7;transition:.15s}
+.cat-tab.active{opacity:1;box-shadow:0 0 0 2px #fff4}
+#blockList{flex:1;overflow-y:auto;padding:6px;scrollbar-width:thin;scrollbar-color:#555 #222}
+#blockList::-webkit-scrollbar{width:6px}
+#blockList::-webkit-scrollbar-track{background:#222}
+#blockList::-webkit-scrollbar-thumb{background:#555;border-radius:3px}
+.palette-block{border-radius:6px;padding:7px 10px;margin-bottom:5px;font-size:.8rem;font-weight:600;color:#fff;cursor:grab;user-select:none;display:flex;align-items:center;flex-wrap:wrap;gap:4px;transition:.1s}
+.palette-block:hover{filter:brightness(1.15)}
+.palette-block:active{cursor:grabbing}
+.pb-input{width:36px;padding:2px 4px;border-radius:3px;border:none;background:rgba(255,255,255,.25);color:#fff;font-size:.75rem;text-align:center}
+.pb-select{padding:2px 4px;border-radius:3px;border:none;background:rgba(255,255,255,.25);color:#fff;font-size:.75rem}
+
+/* Script canvas */
+#scriptArea{flex:1;background:#f9f5dc;position:relative;overflow:hidden}
+#emptyHint{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#bbb;font-size:1rem;pointer-events:none;text-align:center;line-height:1.8}
+
+/* Right panel */
+#rightPanel{width:300px;background:#252525;display:flex;flex-direction:column;border-left:2px solid #111;flex-shrink:0}
+.right-tabs{display:flex;border-bottom:2px solid #111;flex-shrink:0}
+.right-tab{flex:1;padding:10px 0;background:transparent;border:none;color:rgba(255,255,255,.5);font-size:.8rem;font-weight:700;cursor:pointer;text-transform:uppercase;letter-spacing:.06em;transition:.15s}
+.right-tab.active{color:#fff;border-bottom:2px solid #ff8c00;margin-bottom:-2px}
+.right-pane{flex:1;overflow-y:auto;display:none;flex-direction:column;scrollbar-width:thin;scrollbar-color:#444 #1e1e1e}
+.right-pane.active{display:flex}
+
+/* Sprites pane */
+#stageContainer{padding:12px;border-bottom:2px solid #111;flex-shrink:0}
+#stageContainer h3{color:#ccc;font-size:.8rem;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+#stageCanvas{display:block;width:276px;height:180px;border-radius:6px}
+#spritePanel{flex:1;overflow-y:auto;padding:10px;scrollbar-width:thin;scrollbar-color:#444 #1e1e1e}
+#spritePanel h3{color:#ccc;font-size:.8rem;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
+.sprite-item{display:flex;align-items:center;gap:8px;background:#333;border-radius:6px;padding:7px 10px;margin-bottom:6px;cursor:pointer;border:2px solid transparent;transition:.15s}
+.sprite-item.selected{border-color:#7c4dff}
+.sprite-swatch{width:28px;height:28px;border-radius:4px;flex-shrink:0}
+.sprite-info{flex:1}
+.sprite-name{color:#eee;font-size:.85rem;font-weight:600}
+.sprite-coords{color:#999;font-size:.75rem}
+#addSpriteBtn{width:100%;padding:8px;background:#444;color:#ccc;border:2px dashed #666;border-radius:6px;cursor:pointer;font-size:.85rem;transition:.15s;margin-top:4px}
+#addSpriteBtn:hover{background:#555;color:#fff}
+#spriteSettings{margin-top:10px}
+#spriteSettings h4{color:#aaa;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;padding-top:10px;border-top:1px solid #3a3a3a}
+.spr-setting-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.spr-setting-label{color:rgba(255,255,255,.7);font-size:.82rem}
+.spr-toggle-group{display:flex;gap:3px}
+.spr-toggle-btn{padding:4px 9px;border:none;border-radius:5px;font-size:.74rem;font-weight:700;cursor:pointer;background:rgba(255,255,255,.09);color:rgba(255,255,255,.45);transition:.15s}
+.spr-toggle-btn.active{background:#7c4dff;color:#fff}
+.spr-hitbox-btn{width:100%;padding:7px;background:rgba(255,255,255,.07);border:1px dashed rgba(255,255,255,.22);border-radius:6px;color:rgba(255,255,255,.65);font-size:.8rem;cursor:pointer;margin-top:5px;transition:.15s;text-align:center}
+.spr-hitbox-btn:hover{background:rgba(124,77,255,.2);border-color:#7c4dff;color:#fff}
+
+/* Game Settings pane */
+#gameSettingsPane{padding:14px;gap:0}
+.gs-label{color:rgba(255,255,255,.5);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin:14px 0 6px}
+.gs-label:first-child{margin-top:0}
+.gs-input{width:100%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:8px 10px;color:#fff;font-size:.9rem;outline:none;transition:.2s}
+.gs-input:focus{border-color:#ff8c00;background:rgba(255,140,0,.08)}
+.gs-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.gs-row label{color:rgba(255,255,255,.8);font-size:.88rem}
+.gs-slider-row{display:flex;align-items:center;gap:8px}
+.gs-slider{flex:1;accent-color:#ff8c00}
+.gs-num{width:54px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:4px 6px;color:#fff;font-size:.82rem;text-align:center;outline:none}
+.gs-num:focus{border-color:#ff8c00}
+#maxPlayersRow{display:none}
+.publish-btn{width:100%;padding:11px;background:linear-gradient(135deg,#8c50ff,#ff8c00);border:none;border-radius:8px;color:#fff;font-size:.95rem;font-weight:700;cursor:pointer;margin-top:16px;transition:.2s}
+.publish-btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+.bg-type-tabs{display:flex;gap:4px;margin-bottom:8px}
+.bg-type-tab{flex:1;padding:6px 0;border:none;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer;background:rgba(255,255,255,.08);color:rgba(255,255,255,.5);transition:.15s}
+.bg-type-tab.active{background:#ff8c00;color:#fff}
+.bg-file-label{display:block;width:100%;padding:8px;background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.25);border-radius:7px;color:rgba(255,255,255,.7);font-size:.82rem;cursor:pointer;text-align:center;transition:.15s;box-sizing:border-box}
+.bg-file-label:hover{background:rgba(255,255,255,.14);border-color:#ff8c00;color:#fff}
+.bg-note{color:rgba(255,255,255,.35);font-size:.72rem;margin-top:5px;font-style:italic}
+
+/* Drag ghost */
+#dragGhost{position:fixed;pointer-events:none;z-index:9999;opacity:.85;border-radius:6px;padding:7px 10px;font-size:.8rem;font-weight:600;color:#fff;display:none;flex-wrap:wrap;align-items:center;gap:4px}
+/* Map chooser */
+.map-choice{cursor:pointer;padding:10px;border-radius:10px;border:2px solid transparent;transition:border-color .15s,transform .1s}
+.map-choice:hover{border-color:#ff8c00;transform:scale(1.03)}
+/* Snapped blocks */
+.snap-child{border-top:3px solid rgba(255,255,255,0.55)!important;border-radius:0 0 6px 6px!important;}
+.palette-block:not(.snap-child){border-radius:6px!important;}
+.snap-target{box-shadow:0 0 0 3px #fff,0 0 12px 4px rgba(255,255,255,.5)!important;}
+/* ── MOBILE D-PAD ── */
+#mobileControls{position:fixed;bottom:0;left:0;right:0;z-index:150;display:none;pointer-events:none;padding:0 0 env(safe-area-inset-bottom,0)}
+#mobileControls.visible{display:flex;justify-content:space-between;align-items:flex-end;}
+.dpad-side{display:flex;gap:8px;padding:12px 16px;pointer-events:all}
+.dpad-jump{padding:12px 16px;pointer-events:all;display:flex;align-items:flex-end}
+.dpad-btn{width:62px;height:62px;border-radius:16px;border:2px solid rgba(255,255,255,.25);background:rgba(0,0,0,.45);backdrop-filter:blur(6px);color:#fff;font-size:1.5rem;display:flex;align-items:center;justify-content:center;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;transition:background .1s}
+.dpad-btn:active,.dpad-btn.pressed{background:rgba(140,80,255,.55);border-color:rgba(140,80,255,.8)}
+.dpad-jump .dpad-btn{width:72px;height:72px;background:rgba(140,80,255,.3);border-color:rgba(140,80,255,.5)}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:600px){
+  .auth-card{width:92vw;padding:22px 18px}
+  .auth-logo{font-size:2rem}
+  #browseNav{padding:0 10px;gap:8px;height:50px;flex-wrap:nowrap}
+  .nav-logo{font-size:1rem}
+  .nav-btn{padding:6px 10px;font-size:.78rem}
+  .nav-user{font-size:.75rem;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #browseMain{padding:14px 10px}
+  #gamesGrid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .game-card-thumb{height:80px;font-size:2rem}
+  .game-card-body{padding:8px 10px}
+  .game-card-name{font-size:.85rem}
+  .card-btn{padding:5px 0;font-size:.72rem}
+  #chatBox{width:100%;left:0;right:0;bottom:148px;border-radius:0;max-height:140px;padding:0 8px}
+  #chatToggleBtn{bottom:152px}
+  #backToBrowseBtn{top:8px;left:8px;padding:5px 10px;font-size:.75rem}
+  #settingsBtn{top:8px;right:8px;width:36px;height:36px;font-size:17px}
+  #mpPlayersBadge{top:8px;font-size:.7rem;padding:3px 10px}
+
+  /* ── STUDIO MOBILE ── */
+  #studioHeader{height:auto;min-height:44px;flex-wrap:wrap;padding:6px 10px;gap:6px}
+  #studioHeader .logo{font-size:.9rem;flex:1 0 100%;text-align:center}
+  .hdr-btn{padding:5px 10px;font-size:.78rem;flex:1}
+  #studioBody{flex-direction:column;overflow-y:auto}
+  #palette{width:100%;max-height:180px;border-right:none;border-bottom:2px solid #111;order:2}
+  #catTabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .cat-tab{flex:0 0 auto;padding:5px 10px;font-size:.72rem;white-space:nowrap}
+  #blockList{max-height:100px}
+  #scriptArea{min-height:200px;order:3}
+  #rightPanel{width:100%;border-left:none;border-top:2px solid #111;order:1;max-height:50vh;overflow-y:auto}
+  #stageContainer{padding:8px}
+  #stageCanvas{width:100%!important;height:auto!important;max-width:300px;margin:0 auto;display:block}
+  #spritePanel{padding:8px}
+  .spr-toggle-btn{padding:6px 12px;font-size:.78rem;min-height:36px}
+  .spr-hitbox-btn{padding:10px;font-size:.82rem;min-height:44px}
+  .spr-setting-row{flex-wrap:wrap;gap:4px}
+  #addSpriteBtn{padding:10px;font-size:.88rem;min-height:44px}
+  .gs-num{width:60px;padding:6px 8px;font-size:.88rem;min-height:36px}
+  .gs-input{padding:10px 12px;font-size:.95rem;min-height:44px}
+  .right-tab{padding:12px 0;font-size:.78rem;min-height:44px}
+  .publish-btn{padding:14px;font-size:1rem;min-height:48px}
+
+  /* Map chooser mobile */
+  #mapChooserModal > div{padding:20px 16px!important;width:92vw!important;max-width:380px}
+  #mapChooserModal canvas{width:140px!important;height:88px!important}
+
+  /* Modal panels mobile */
+  .modal-panel{min-width:auto;width:92vw;max-width:380px;padding:20px 18px}
+}
+
+/* ── PIXEL ART & HITBOX MODALS MOBILE ── */
+@media(max-width:420px){
+  #pixelDrawModal > div, #hitboxModal > div{width:92vw!important;max-width:380px;padding:14px!important}
+  #pixelCanvas, #hitboxCanvas{width:min(280px,80vw)!important;height:min(280px,80vw)!important}
+  #gamesGrid{grid-template-columns:1fr!important}
+  #mapChooserModal > div > div:last-of-type{flex-direction:column!important;align-items:center}
+}
+</style>
+<body>
+
+<!-- ── AUTH SCREEN ── -->
+<div id="authScreen">
+  <div class="auth-logo">Ord<span>ino</span></div>
+  <div class="auth-tagline">Build. Play. Share.</div>
+  <div class="auth-card">
+    <div class="auth-field"><label>Username</label><input type="text" id="authUsername" placeholder="Enter username" autocomplete="username"></div>
+    <div class="auth-field"><label>Password</label><input type="password" id="authPassword" placeholder="Enter password" autocomplete="current-password"></div>
+    <div id="authError" class="auth-error"></div>
+    <button class="auth-submit" onclick="doAuth('login')" style="background:linear-gradient(135deg,#8c50ff,#5533cc)">Login</button>
+    <button class="auth-submit" onclick="doAuth('register')" style="margin-top:8px;background:linear-gradient(135deg,#ff8c00,#ff5722)">Create Account</button>
+  </div>
+</div>
+
+<!-- ── BROWSE SCREEN ── -->
+<div id="browseScreen">
+  <div id="browseNav">
+    <span class="nav-logo">Ord<span>ino</span></span>
+    <span class="nav-user" id="navUser"></span>
+    <button class="nav-btn nav-btn-create" onclick="startNewGame()">+ Create Game</button>
+    <button class="nav-btn nav-btn-logout" onclick="logout()">Logout</button>
+  </div>
+  <div id="browseMain">
+    <div class="browse-section-title">🎮 All Games</div>
+    <div id="gamesGrid"></div>
+  </div>
+</div>
+
+<!-- ── GAME SCREEN ── -->
+<div id="gameScreen"><canvas id="gameCanvas"></canvas></div>
+<div id="mpOverlay" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.85);align-items:center;justify-content:center">
+  <div style="background:#1e1e2e;border-radius:16px;padding:28px 32px;width:min(340px,92vw);text-align:center;box-shadow:0 12px 50px rgba(0,0,0,.7)">
+    <h2 style="color:#fff;margin:0 0 4px;font-size:1.3rem">👥 Multiplayer</h2>
+    <p id="mpStatus" style="color:rgba(255,255,255,.5);font-size:.8rem;margin:0 0 18px">Connecting…</p>
+    <div id="mpHostPanel" style="display:none">
+      <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin:0 0 8px">Share this Room Code:</p>
+      <div id="mpRoomCode" style="background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.3);border-radius:10px;padding:14px;font-size:1.6rem;font-weight:900;color:#ff8c00;letter-spacing:.15em;cursor:pointer;user-select:all" onclick="copyRoomCode()"></div>
+      <p style="color:rgba(255,255,255,.35);font-size:.7rem;margin:6px 0 14px">Click to copy</p>
+      <p id="mpPlayerCount" style="color:rgba(255,255,255,.6);font-size:.85rem;margin:0 0 12px">Players: 1</p>
+      <button onclick="mpStartGame()" style="width:100%;padding:12px;background:#4caf50;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer">▶ Start Game</button>
+    </div>
+    <div id="mpJoinPanel" style="display:none">
+      <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin:0 0 8px">Enter Room Code:</p>
+      <input id="mpJoinInput" type="text" maxlength="8" placeholder="ABCD1234" style="width:100%;padding:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff;font-size:1.2rem;text-align:center;letter-spacing:.12em;font-weight:700;outline:none;text-transform:uppercase">
+      <button onclick="mpJoinRoom()" style="width:100%;padding:12px;margin-top:10px;background:#2196f3;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer">🔗 Join</button>
+      <p id="mpJoinStatus" style="color:rgba(255,255,255,.4);font-size:.78rem;margin:8px 0 0"></p>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button onclick="mpChoose('host')" id="mpBtnHost" style="flex:1;padding:10px;background:rgba(76,175,80,.2);border:1px solid rgba(76,175,80,.5);border-radius:8px;color:#66bb6a;font-weight:700;cursor:pointer;font-size:.9rem">🏠 Host</button>
+      <button onclick="mpChoose('join')" id="mpBtnJoin" style="flex:1;padding:10px;background:rgba(33,150,243,.2);border:1px solid rgba(33,150,243,.5);border-radius:8px;color:#42a5f5;font-weight:700;cursor:pointer;font-size:.9rem">🔗 Join</button>
+      <button onclick="mpPlaySolo()" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:8px;color:#aaa;font-weight:700;cursor:pointer;font-size:.9rem">Solo</button>
+    </div>
+  </div>
+</div>
+<button id="backToBrowseBtn" onclick="backToBrowse()">◀ Games</button>
+<div id="mpPlayersBadge"></div>
+<button id="settingsBtn">⚙️</button>
+<div id="toast"></div>
+
+<!-- ── CHAT ── -->
+<div id="chatBox">
+  <div id="chatLog"></div>
+  <form id="chatForm" autocomplete="off">
+    <input id="chatInput" placeholder="Press Enter to chat…" maxlength="90">
+    <button type="submit" id="chatSendBtn">➤</button>
+  </form>
+</div>
+<button id="chatToggleBtn" title="Toggle Chat">💬</button>
+
+<!-- ── MOBILE D-PAD ── -->
+<div id="mobileControls">
+  <div class="dpad-side">
+    <div class="dpad-btn" id="btnLeft"  ontouchstart="dpadDown('left')"  ontouchend="dpadUp('left')"  onmousedown="dpadDown('left')"  onmouseup="dpadUp('left')">◀</div>
+    <div class="dpad-btn" id="btnRight" ontouchstart="dpadDown('right')" ontouchend="dpadUp('right')" onmousedown="dpadDown('right')" onmouseup="dpadUp('right')">▶</div>
+  </div>
+  <div class="dpad-jump">
+    <div class="dpad-btn" id="btnJump"  ontouchstart="dpadDown('jump')"  ontouchend="dpadUp('jump')"  onmousedown="dpadDown('jump')"  onmouseup="dpadUp('jump')">⬆</div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal">
+  <div class="modal-panel">
+    <h2>⚙️ Settings</h2>
+    <div class="setting-row"><label>🎵 Music</label><label class="toggle"><input type="checkbox" id="musicToggle" checked><span class="slider"></span></label></div>
+    <div class="setting-row"><label>🔊 Sound Effects</label><label class="toggle"><input type="checkbox" id="sfxToggle" checked><span class="slider"></span></label></div>
+    <div class="setting-row"><label>📊 Show FPS</label><label class="toggle"><input type="checkbox" id="fpsToggle"><span class="slider"></span></label></div>
+    <div class="setting-row"><label>🖥️ Quality</label><select class="setting-select" id="qualitySelect"><option>High</option><option>Medium</option><option>Low</option></select></div>
+    <button class="modal-btn studio-btn" id="openStudioBtn">🛠️ Open Ordino Studio</button>
+    <button class="modal-btn close-btn" id="closeSettingsBtn">✕ Close</button>
+  </div>
+</div>
+
+<!-- ── MAP CHOOSER MODAL ── -->
+<div id="mapChooserModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:2000;align-items:center;justify-content:center;backdrop-filter:blur(6px)">
+  <div style="background:linear-gradient(135deg,#2a1a4e,#1a1a3a);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:32px 36px;text-align:center;color:#fff;box-shadow:0 24px 64px rgba(0,0,0,.6)">
+    <h2 style="margin:0 0 6px;font-size:1.4rem">🗺️ Choose Your Map</h2>
+    <p style="color:#aaa;font-size:.88rem;margin:0 0 24px">Pick a starting map for your game</p>
+    <div style="display:flex;gap:20px;justify-content:center">
+      <div class="map-choice" onclick="selectMap('empty')">
+        <canvas id="mapPreviewEmpty" width="190" height="120" style="border-radius:8px;display:block"></canvas>
+        <div style="margin-top:8px;font-weight:700;font-size:1rem">🌌 Empty</div>
+        <div style="color:#aaa;font-size:.8rem;margin-top:2px">Just the sky</div>
+      </div>
+      <div class="map-choice" onclick="selectMap('ground')">
+        <canvas id="mapPreviewGround" width="190" height="120" style="border-radius:8px;display:block"></canvas>
+        <div style="margin-top:8px;font-weight:700;font-size:1rem">🌿 With Ground</div>
+        <div style="color:#aaa;font-size:.8rem;margin-top:2px">Ground + platforms</div>
+      </div>
+    </div>
+    <button onclick="document.getElementById('mapChooserModal').style.display='none'" style="margin-top:20px;padding:8px 22px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff;cursor:pointer;font-size:.9rem">✕ Cancel</button>
+  </div>
+</div>
+
+<!-- ── STUDIO SCREEN ── -->
+<div id="studioScreen">
+  <div id="studioHeader">
+    <span class="logo">🧱 Ordino Studio</span>
+    <button class="hdr-btn" id="runBtn">▶ Run</button>
+    <button class="hdr-btn" id="stopBtn">■ Stop</button>
+    <button class="hdr-btn" id="publishBtn">🚀 Publish</button>
+    <button class="hdr-btn" id="backBtn">◀ Back to Page</button>
+  </div>
+  <div id="studioBody">
+    <div id="palette">
+      <div id="catTabs"></div>
+      <div id="blockList"></div>
+    </div>
+    <div id="scriptArea">
+      <div id="emptyHint">🧱 Drag blocks here<br>to build your script!</div>
+    </div>
+    <div id="rightPanel">
+      <div class="right-tabs">
+        <button class="right-tab active" id="tabSprites" onclick="switchRightTab('sprites')">Sprites</button>
+        <button class="right-tab" id="tabSettings" onclick="switchRightTab('settings')">Game Settings</button>
+      </div>
+      <!-- Sprites pane -->
+      <div class="right-pane active" id="spritesPane">
+        <div id="stageContainer">
+          <h3>Stage</h3>
+          <canvas id="stageCanvas" width="276" height="180"></canvas>
+        </div>
+        <div id="spritePanel">
+          <h3>Sprites</h3>
+          <div id="spriteList"></div>
+          <button id="addSpriteBtn">+ Add Sprite</button>
+          <div id="spriteSettings"></div>
+        </div>
+      </div>
+      <!-- Game Settings pane -->
+      <div class="right-pane" id="gameSettingsPane">
+        <span class="gs-label">Game Name</span>
+        <input class="gs-input" id="gsName" type="text" value="My Game" maxlength="40">
+
+        <span class="gs-label">Mode</span>
+        <div class="gs-row">
+          <label>Multiplayer</label>
+          <label class="toggle"><input type="checkbox" id="gsMultiplayer" onchange="onMultiChange()"><span class="slider"></span></label>
+        </div>
+        <div class="gs-row" id="maxPlayersRow">
+          <label>Max Players (1–30)</label>
+          <input class="gs-num" id="gsMaxPlayers" type="number" min="1" max="30" value="4">
+        </div>
+
+        <span class="gs-label">Player Speed</span>
+        <div class="gs-slider-row">
+          <input class="gs-slider" type="range" id="gsSpeedSlider" min="1" max="12" step="0.5" value="4" oninput="syncGS('speed')">
+          <input class="gs-num" id="gsSpeedNum" type="number" min="1" max="12" step="0.5" value="4" oninput="syncGS('speedNum')">
+        </div>
+
+        <span class="gs-label">Gravity</span>
+        <div class="gs-slider-row">
+          <input class="gs-slider" type="range" id="gsGravSlider" min="0.1" max="2" step="0.05" value="0.55" oninput="syncGS('grav')">
+          <input class="gs-num" id="gsGravNum" type="number" min="0.1" max="2" step="0.05" value="0.55" oninput="syncGS('gravNum')">
+        </div>
+
+        <span class="gs-label">Jump Height</span>
+        <div class="gs-slider-row">
+          <input class="gs-slider" type="range" id="gsJumpSlider" min="4" max="24" step="0.5" value="13" oninput="syncGS('jump')">
+          <input class="gs-num" id="gsJumpNum" type="number" min="4" max="24" step="0.5" value="13" oninput="syncGS('jumpNum')">
+        </div>
+
+        <span class="gs-label">Background</span>
+        <div class="bg-type-tabs">
+          <button class="bg-type-tab active" id="bgTabAnim"  onclick="setBgTab('animation')">Animation</button>
+          <button class="bg-type-tab"        id="bgTabPhoto" onclick="setBgTab('photo')">Photo</button>
+          <button class="bg-type-tab"        id="bgTabVideo" onclick="setBgTab('video')">Video</button>
+        </div>
+        <div id="bgAnimPanel">
+          <select id="gsBgAnim" onchange="bgAnimPreset=this.value" style="width:100%;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:7px;color:#fff;font-size:.9rem;outline:none">
+            <option value="night">🌙 Night Sky</option>
+            <option value="sunset">🌅 Sunset</option>
+            <option value="ocean">🌊 Ocean</option>
+          </select>
+        </div>
+        <div id="bgPhotoPanel" style="display:none">
+          <label class="bg-file-label" for="gsBgPhotoInput">📷 Choose Image…</label>
+          <input type="file" id="gsBgPhotoInput" accept="image/*" style="display:none" onchange="onBgFileChange('photo')">
+          <img id="bgPhotoPreview" style="width:100%;border-radius:6px;margin-top:6px;display:none;max-height:80px;object-fit:cover" alt="">
+        </div>
+        <div id="bgVideoPanel" style="display:none">
+          <label class="bg-file-label" for="gsBgVideoInput">🎬 Choose Video…</label>
+          <input type="file" id="gsBgVideoInput" accept="video/*" style="display:none" onchange="onBgFileChange('video')">
+          <div id="bgVideoName" class="bg-note">No video chosen</div>
+          <div class="bg-note">⚠️ Video backgrounds are session-only and won't be saved.</div>
+        </div>
+
+        <span class="gs-label">Map Size</span>
+        <div class="gs-row" style="gap:8px">
+          <label style="min-width:42px">Width</label>
+          <input class="gs-num" id="gsMapW" type="number" min="200" max="3000" step="10" value="800" onchange="onMapSizeChange()">
+          <label style="min-width:42px;margin-left:6px">Height</label>
+          <input class="gs-num" id="gsMapH" type="number" min="150" max="2000" step="10" value="450" onchange="onMapSizeChange()">
+          <span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:4px">px</span>
+        </div>
+
+        <button class="publish-btn" onclick="publishGame()">🚀 Publish Game</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<video id="bgVideoPlayer" style="display:none" loop muted playsinline></video>
+<div id="dragGhost"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  AUTH
+// ════════════════════════════════════════════════════════
+let currentUser = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('authPassword').addEventListener('keydown', e => { if(e.key==='Enter') doAuth('login'); });
+  document.getElementById('authUsername').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('authPassword').focus(); });
+});
+
+function setAuthError(msg) {
+  const errEl = document.getElementById('authError');
+  if (msg) { errEl.textContent = msg; errEl.classList.add('visible'); }
+  else { errEl.textContent = ''; errEl.classList.remove('visible'); }
+}
+
+function doAuth(mode) {
+  try {
+    const username = document.getElementById('authUsername').value.trim();
+    const password = document.getElementById('authPassword').value;
+    setAuthError('');
+
+    if (!username) { setAuthError('Please enter a username.'); return; }
+    if (!password) { setAuthError('Please enter a password.'); return; }
+
+    const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
+
+    if (mode === 'register') {
+      if (accounts[username]) { setAuthError('That username is already taken. Try a different one.'); return; }
+      accounts[username] = password;
+      localStorage.setItem('bw_accounts', JSON.stringify(accounts));
+    } else {
+      if (!accounts[username] || accounts[username] !== password) {
+        setAuthError('Wrong username or password. Use "Create Account" to register.');
+        return;
+      }
+    }
+
+    currentUser = username;
+    localStorage.setItem('bw_current_user', username);
+    document.getElementById('authScreen').style.display = 'none';
+    showBrowse();
+  } catch(err) {
+    setAuthError('Error: ' + err.message);
+  }
+}
+
+function logout() {
+  currentUser = null;
+  localStorage.removeItem('bw_current_user');
+  document.getElementById('browseScreen').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+  document.getElementById('authUsername').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authError').textContent = '';
+  document.getElementById('authError').classList.remove('visible');
+}
+
+// Just read saved user — don't touch DOM yet
+(function() {
+  const saved = localStorage.getItem('bw_current_user');
+  const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
+  if (saved && accounts[saved]) currentUser = saved;
+})();
+
+// Once everything is fully loaded, show the right screen
+window.addEventListener('load', function() {
+  try {
+    if (currentUser) {
+      document.getElementById('authScreen').style.display = 'none';
+      showBrowse();
+    }
+  } catch(e) {
+    // If anything fails, fall back to auth screen
+    document.getElementById('authScreen').style.display = 'flex';
+  }
+});
+
+// ════════════════════════════════════════════════════════
+//  BROWSE
+// ════════════════════════════════════════════════════════
+const THUMB_COLORS = ['#1a237e','#880e4f','#1b5e20','#e65100','#4a148c','#006064','#bf360c','#263238'];
+
+function showBrowse() {
+  document.getElementById('navUser').textContent = '👤 ' + currentUser;
+  document.getElementById('browseScreen').style.display = 'flex';
+  document.getElementById('settingsBtn').style.display = 'none';
+  document.getElementById('backToBrowseBtn').style.display = 'none';
+  renderGamesGrid();
+}
+
+function renderGamesGrid() {
+  const grid = document.getElementById('gamesGrid');
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  grid.innerHTML = '';
+
+  if (games.length === 0) {
+    grid.innerHTML = '<div class="browse-empty">No games yet! Click <strong>+ Create Game</strong> to make the first one.</div>';
+    return;
+  }
+
+  games.forEach((g, idx) => {
+    const card = document.createElement('div');
+    card.className = 'game-card';
+    const bg = THUMB_COLORS[idx % THUMB_COLORS.length];
+    const badge = g.multiplayer
+      ? `<span class="game-card-badge badge-multi">👥 ${g.maxPlayers}p</span>`
+      : `<span class="game-card-badge badge-single">🎮 1P</span>`;
+    card.innerHTML = `
+      <div class="game-card-thumb" style="background:${bg}">${badge}🎮</div>
+      <div class="game-card-body">
+        <div class="game-card-name">${escHtml(g.name)}</div>
+        <div class="game-card-author">by ${escHtml(g.author)}</div>
+        <div class="game-card-actions">
+          <button class="card-btn card-btn-play" onclick="playGame(${idx})">▶ Play</button>
+          ${g.author===currentUser ? `<button class="card-btn card-btn-edit" onclick="editGame(${idx})">✏️ Edit</button>` : ''}
+          ${g.author===currentUser ? `<button class="card-btn card-btn-delete" onclick="deleteGame(${idx})">🗑️ Delete</button>` : ''}
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function deleteGame(idx) {
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const g = games[idx];
+  if (!g || g.author !== currentUser) return; // safety check — can only delete your own
+  if (!confirm(`Delete "${g.name}"? This cannot be undone.`)) return;
+  games.splice(idx, 1);
+  localStorage.setItem('bw_games', JSON.stringify(games));
+  renderGamesGrid();
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+let currentGameIdx = -1;
+
+function playGame(idx) {
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const g = games[idx];
+  currentGameIdx = idx;
+  loadGameSettings(g);
+  if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
+  document.getElementById('browseScreen').style.display = 'none';
+  document.getElementById('settingsBtn').style.display = 'block';
+  document.getElementById('backToBrowseBtn').style.display = 'block';
+  showMobileControls();
+  showChat();
+  if (g.multiplayer) {
+    mpShowOverlay();
+  } else {
+    initWorld();
+    lastTime = performance.now();
+    gameAF = requestAnimationFrame(gameLoop);
+  }
+}
+
+function backToBrowse() {
+  cancelAnimationFrame(gameAF);
+  mpCleanup();
+  document.getElementById('mpOverlay').style.display = 'none';
+  document.getElementById('settingsBtn').style.display = 'none';
+  document.getElementById('backToBrowseBtn').style.display = 'none';
+  document.getElementById('settingsModal').classList.remove('open');
+  hideMobileControls();
+  hideChat();
+  showBrowse();
+}
+
+function startNewGame() {
+  currentGameIdx = -1;
+  resetStudioForNewGame();
+  document.getElementById('browseScreen').style.display = 'none';
+  showMapChooser();
+}
+
+function editGame(idx) {
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const g = games[idx];
+  currentGameIdx = idx;
+  loadGameSettings(g);
+  // Load studio state from saved game
+  loadStudioFromGame(g);
+  document.getElementById('browseScreen').style.display = 'none';
+  openStudio(true);
+}
+
+// ════════════════════════════════════════════════════════
+//  GAME SETTINGS (shared between browse & studio)
+// ════════════════════════════════════════════════════════
+let SPEED = 4, GRAVITY = 0.55, JUMP_FORCE = 13;
+
+function loadGameSettings(g) {
+  SPEED = g.speed || 4;
+  GRAVITY = g.gravity || 0.55;
+  JUMP_FORCE = g.jumpHeight || 13;
+  studioMapType = g.mapType || 'ground';
+  gameSpawnX = g.spawnX || 50;
+  gameSpawnY = g.spawnY || 128;
+  // Sync studio UI
+  document.getElementById('gsName').value = g.name || 'My Game';
+  document.getElementById('gsMultiplayer').checked = !!g.multiplayer;
+  document.getElementById('gsMaxPlayers').value = g.maxPlayers || 4;
+  document.getElementById('maxPlayersRow').style.display = g.multiplayer ? 'flex' : 'none';
+  document.getElementById('gsSpeedSlider').value = SPEED;
+  document.getElementById('gsSpeedNum').value = SPEED;
+  document.getElementById('gsGravSlider').value = GRAVITY;
+  document.getElementById('gsGravNum').value = GRAVITY;
+  document.getElementById('gsJumpSlider').value = JUMP_FORCE;
+  document.getElementById('gsJumpNum').value = JUMP_FORCE;
+  mapW = g.mapW || 800;
+  mapH = g.mapH || 450;
+  document.getElementById('gsMapW').value = mapW;
+  document.getElementById('gsMapH').value = mapH;
+  resize();
+  applyBgFromData(g);
+}
+
+function readGameSettings() {
+  return {
+    name: document.getElementById('gsName').value.trim() || 'My Game',
+    multiplayer: document.getElementById('gsMultiplayer').checked,
+    maxPlayers: Math.min(30, Math.max(1, parseInt(document.getElementById('gsMaxPlayers').value)||4)),
+    speed: parseFloat(document.getElementById('gsSpeedNum').value)||4,
+    gravity: parseFloat(document.getElementById('gsGravNum').value)||0.55,
+    jumpHeight: parseFloat(document.getElementById('gsJumpNum').value)||13,
+    mapType: studioMapType,
+    spawnX: sprites[0] ? sprites[0].x : 50,
+    spawnY: sprites[0] ? sprites[0].y : 128,
+    mapW, mapH,
+    bgType, bgAnimPreset,
+    bgDataURL: bgType==='photo' ? bgDataURL : '',
+  };
+}
+
+function syncGS(which) {
+  const sl = v => parseFloat(v) || 0;
+  if (which==='speed')    { document.getElementById('gsSpeedNum').value = sl(document.getElementById('gsSpeedSlider').value); }
+  if (which==='speedNum') { document.getElementById('gsSpeedSlider').value = sl(document.getElementById('gsSpeedNum').value); }
+  if (which==='grav')     { document.getElementById('gsGravNum').value = sl(document.getElementById('gsGravSlider').value); }
+  if (which==='gravNum')  { document.getElementById('gsGravSlider').value = sl(document.getElementById('gsGravNum').value); }
+  if (which==='jump')     { document.getElementById('gsJumpNum').value = sl(document.getElementById('gsJumpSlider').value); }
+  if (which==='jumpNum')  { document.getElementById('gsJumpSlider').value = sl(document.getElementById('gsJumpNum').value); }
+  // Apply live to running game
+  const gs = readGameSettings();
+  SPEED = gs.speed; GRAVITY = gs.gravity; JUMP_FORCE = gs.jumpHeight;
+}
+
+function onMapSizeChange() {
+  mapW = Math.max(200, Math.min(3000, parseInt(document.getElementById('gsMapW').value)||800));
+  mapH = Math.max(150, Math.min(2000, parseInt(document.getElementById('gsMapH').value)||450));
+  document.getElementById('gsMapW').value = mapW;
+  document.getElementById('gsMapH').value = mapH;
+  resize();
+}
+
+function onMultiChange() {
+  const on = document.getElementById('gsMultiplayer').checked;
+  document.getElementById('maxPlayersRow').style.display = on ? 'flex' : 'none';
+}
+
+function publishGame() {
+  const gs = readGameSettings();
+  if (!gs.name) { showToast('⚠️ Please enter a game name!'); return; }
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const gameData = {
+    ...gs,
+    author: currentUser,
+    sprites: JSON.parse(JSON.stringify(sprites)),
+    blocks: getScriptBlocksData(),
+  };
+  if (currentGameIdx >= 0 && games[currentGameIdx] && games[currentGameIdx].author === currentUser) {
+    games[currentGameIdx] = gameData;
+  } else {
+    games.push(gameData);
+    currentGameIdx = games.length - 1;
+  }
+  localStorage.setItem('bw_games', JSON.stringify(games));
+  showToast('🚀 Game published: ' + gs.name);
+}
+
+// ════════════════════════════════════════════════════════
+//  GAME ENGINE
+// ════════════════════════════════════════════════════════
+const gameCanvas = document.getElementById('gameCanvas');
+const ctx = gameCanvas.getContext('2d');
+let gameAF, lastTime = 0, fps = 0, frameCount = 0, fpsTimer = 0;
+let showFPS = false, sfxOn = true, musicOn = true;
+let hintAlpha = 1, hintTimer = 0;
+let bgType = 'animation', bgAnimPreset = 'night', bgDataURL = '', bgImageEl = null, bgHasVideo = false, gameTime = 0;
+let mapW = 800, mapH = 450;
+const bgVideoEl = document.getElementById('bgVideoPlayer');
+
+function resize() { gameCanvas.width = mapW; gameCanvas.height = mapH; }
+window.addEventListener('resize', resize);
+resize();
+
+const player = {x:180,y:0,vx:0,vy:0,w:24,h:36,onGround:false,dir:1,frame:0,frameT:0,bubble:null};
+const keys = {};
+document.addEventListener('keydown', e => { keys[e.code] = true; });
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+function makePlatforms(W, H) {
+  return []; // Ground is now a sprite — no platform needed
+}
+let platforms = [];
+const clouds = [{x:100,y:80,s:1},{x:400,y:50,s:.8},{x:700,y:100,s:1.2},{x:1000,y:60,s:.9},{x:1300,y:90,s:1.1}];
+
+function initWorld() {
+  const W = gameCanvas.width, H = gameCanvas.height;
+  platforms = makePlatforms(W, H);
+  hintAlpha = 1; hintTimer = 0;
+  // Spawn from the isSpawn sprite (stage coords 276×180 → game coords)
+  const spawnSpr = sprites.find(s => s.isSpawn) || {x:50, y:128};
+  const spawnX = spawnSpr.x * (W / 276);
+  const spawnY = spawnSpr.y * (H / 180) - player.h;
+  player.x = Math.max(0, Math.min(W - player.w, spawnX));
+  player.y = spawnY; player.vx = 0; player.vy = 0;
+  // Init runtime positions for all sprites
+  for (const s of sprites) {
+    s._x = s.x * (W / 276);
+    s._y = s.y * (H / 180);
+    s._vy = 0;
+    s._vx = 0;
+  }
+}
+
+function gameLoop(ts) {
+  const dt = ts - lastTime; lastTime = ts;
+  gameTime = ts;
+  frameCount++; fpsTimer += dt;
+  if (fpsTimer >= 500) { fps = Math.round(frameCount*1000/fpsTimer); frameCount=0; fpsTimer=0; }
+
+  const chatTyping = document.activeElement === document.getElementById('chatInput');
+  const jumping = !chatTyping && (keys['Space']||keys['KeyW']||keys['ArrowUp']);
+  const left    = !chatTyping && (keys['KeyA']||keys['ArrowLeft']);
+  const right   = !chatTyping && (keys['KeyD']||keys['ArrowRight']);
+  player.vx = right ? SPEED : left ? -SPEED : 0;
+  if (player.vx!==0) player.dir = player.vx>0?1:-1;
+  if (jumping && player.onGround) { player.vy = -JUMP_FORCE; player.onGround=false; if(sfxOn) playTone(300,0.05,'square'); }
+
+  player.vy += GRAVITY;
+  player.x += player.vx; player.y += player.vy;
+  player.onGround = false;
+
+  const H = gameCanvas.height;
+  for (const p of platforms) {
+    if (player.x+player.w>p.x && player.x<p.x+p.w) {
+      if (player.vy>=0 && player.y+player.h>p.y && player.y+player.h<p.y+p.h+20) {
+        player.y=p.y-player.h; player.vy=0; player.onGround=true;
+      }
+    }
+  }
+  if (player.x<0) player.x=0;
+  if (player.x+player.w>gameCanvas.width) player.x=gameCanvas.width-player.w;
+  if (player.y>H+100) { player.y=0; player.vy=0; }
+
+  // Sprite physics + player collision
+  for (const s of sprites) {
+    if (!s.visible || s.isSpawn || !s._x) continue;
+    const sw = s.hitbox.w,  sh = s.hitbox.h;
+    const rw = s.hitbox.rw || sw, rh = s.hitbox.rh || sh;
+    const ox = s.hitbox.ox || 0,  oy = s.hitbox.oy || 0;
+    // _x = render center-x, _y = render bottom-y
+    // Hitbox world coords derived from those:
+    const hbL = () => s._x - rw/2 + ox;
+    const hbT = () => s._y - rh  + oy;
+
+    if (s.gravity) {
+      s._vx = (s._vx || 0) * 0.82;
+      if (Math.abs(s._vx) < 0.1) s._vx = 0;
+      s._x += s._vx;
+      s._vy += GRAVITY;
+      s._y += s._vy;
+      const L = hbL(), T = hbT();
+      for (const p of platforms) {
+        if (L < p.x+p.w && L+sw > p.x && s._vy >= 0 && T+sh > p.y && T+sh < p.y+p.h+20) {
+          s._y = p.y + rh - oy - sh; // set so hbBottom == p.y
+          s._vy = 0;
+        }
+      }
+      s._x = Math.max(rw/2 - ox, Math.min(gameCanvas.width + rw/2 - ox - sw, s._x));
+      if (s._y > H+100) { s._y = 0; s._vy = 0; }
+    }
+
+    if (s.solid) {
+      // Hitbox rect — uses ox/oy offset from applyHitbox if available
+      const sx = s._x - rw/2 + ox;   // hitbox left
+      const sy = s._y - rh  + oy;    // hitbox top
+
+      // Land on top — only when actually falling
+      if (player.x+player.w > sx && player.x < sx+sw) {
+        if (player.vy > 0.5 && player.y+player.h > sy && player.y+player.h < sy+sh+20) {
+          player.y = sy - player.h; player.vy = 0; player.onGround = true;
+        }
+      }
+
+      // Side collision
+      const vertOverlap = player.y + player.h > sy + 2 && player.y < sy + sh;
+      if (vertOverlap && player.x+player.w > sx && player.x < sx+sw) {
+        const oR = player.x + player.w - sx;
+        const oL = sx + sw - player.x;
+        if (s.gravity) {
+          if (player.vx > 0 && oR > 0 && oR < sw*0.75) { s._vx = player.vx*1.1; player.x = sx - player.w; }
+          else if (player.vx < 0 && oL > 0 && oL < sw*0.75) { s._vx = player.vx*1.1; player.x = sx + sw; }
+        } else {
+          if (oR > 0 && oR <= oL) player.x = sx - player.w;
+          else if (oL > 0 && oL < oR) player.x = sx + sw;
+        }
+      }
+    }
+  }
+
+  if (player.vx!==0&&player.onGround) { player.frameT+=dt; if(player.frameT>100){player.frame=(player.frame+1)%4;player.frameT=0;} }
+  else { player.frame=0; }
+
+
+
+  for (const cl of clouds) { cl.x -= 0.3; if(cl.x<-200) cl.x=gameCanvas.width+100; }
+  if (hintTimer<5000) hintTimer+=dt; else if(hintAlpha>0) hintAlpha-=0.02;
+
+  // Multiplayer: send position ~15 times/sec
+  mpSendTimer += dt;
+  if(mpSendTimer > 66) { mpSendPosition(); mpSendTimer = 0; }
+
+  drawGame();
+  gameAF = requestAnimationFrame(gameLoop);
+}
+
+function drawBg(c, W, H, t) {
+  if (bgType==='photo' && bgImageEl) { c.drawImage(bgImageEl,0,0,W,H); return; }
+  if (bgType==='video' && bgHasVideo && bgVideoEl.readyState>=2) { c.drawImage(bgVideoEl,0,0,W,H); return; }
+  if (bgAnimPreset==='sunset') {
+    const g=c.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#1a0533'); g.addColorStop(0.35,'#c0392b'); g.addColorStop(0.65,'#e67e22'); g.addColorStop(1,'#f39c12');
+    c.fillStyle=g; c.fillRect(0,0,W,H);
+    const sx=W*0.68, sy=H*0.38;
+    const sg=c.createRadialGradient(sx,sy,2,sx,sy,W*0.12);
+    sg.addColorStop(0,'rgba(255,240,100,1)'); sg.addColorStop(0.5,'rgba(255,180,50,0.7)'); sg.addColorStop(1,'rgba(255,100,0,0)');
+    c.fillStyle=sg; c.beginPath(); c.arc(sx,sy,W*0.12,0,Math.PI*2); c.fill();
+  } else if (bgAnimPreset==='ocean') {
+    const g=c.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#001a33'); g.addColorStop(0.5,'#003366'); g.addColorStop(1,'#00509e');
+    c.fillStyle=g; c.fillRect(0,0,W,H);
+    for (let wv=0;wv<3;wv++) {
+      const wy=H*(0.6+wv*0.1), amp=H*0.03+wv*H*0.02, speed=t*0.001*(1+wv*0.4);
+      c.beginPath(); c.moveTo(0,wy);
+      for (let x=0;x<=W;x+=3) c.lineTo(x, wy+Math.sin(x*0.025+speed)*amp);
+      c.lineTo(W,H); c.lineTo(0,H); c.closePath();
+      c.fillStyle=`rgba(0,${80+wv*25},${170+wv*15},${0.35-wv*0.05})`; c.fill();
+    }
+  } else {
+    const sky=c.createLinearGradient(0,0,0,H);
+    sky.addColorStop(0,'#0a0a2e'); sky.addColorStop(0.5,'#1a1a5e'); sky.addColorStop(1,'#2d1b4e');
+    c.fillStyle=sky; c.fillRect(0,0,W,H);
+  }
+}
+
+function setBgTab(type) {
+  bgType = type;
+  const map = {animation:'Anim', photo:'Photo', video:'Video'};
+  Object.entries(map).forEach(([t,k]) => {
+    document.getElementById('bgTab'+k).classList.toggle('active', t===type);
+    document.getElementById('bg'+k+'Panel').style.display = t===type ? '' : 'none';
+  });
+  if (type==='video' && bgHasVideo) bgVideoEl.play().catch(()=>{});
+}
+
+function onBgFileChange(type) {
+  if (type==='photo') {
+    const file = document.getElementById('gsBgPhotoInput').files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      bgDataURL = e.target.result;
+      bgImageEl = new Image(); bgImageEl.src = bgDataURL;
+      const prev = document.getElementById('bgPhotoPreview');
+      prev.src = bgDataURL; prev.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  } else {
+    const file = document.getElementById('gsBgVideoInput').files[0];
+    if (!file) return;
+    bgVideoEl.src = URL.createObjectURL(file);
+    bgHasVideo = true;
+    bgVideoEl.play().catch(()=>{});
+    document.getElementById('bgVideoName').textContent = '🎬 ' + file.name;
+  }
+}
+
+function applyBgFromData(g) {
+  bgType = g.bgType || 'animation';
+  bgAnimPreset = g.bgAnimPreset || 'night';
+  bgDataURL = g.bgDataURL || '';
+  bgImageEl = null; bgHasVideo = false;
+  if (bgType==='photo' && bgDataURL) {
+    bgImageEl = new Image(); bgImageEl.src = bgDataURL;
+    const prev = document.getElementById('bgPhotoPreview');
+    prev.src = bgDataURL; prev.style.display = 'block';
+  } else {
+    document.getElementById('bgPhotoPreview').style.display = 'none';
+  }
+  document.getElementById('gsBgAnim').value = bgAnimPreset;
+  setBgTab(bgType);
+}
+
+function drawGame() {
+  const W=gameCanvas.width, H=gameCanvas.height;
+  drawBg(ctx, W, H, gameTime);
+  if (bgType==='animation' && bgAnimPreset==='night') {
+    for (const cl of clouds) {
+      ctx.save(); ctx.globalAlpha=0.18; ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.arc(cl.x,cl.y,30*cl.s,0,Math.PI*2); ctx.arc(cl.x+25*cl.s,cl.y-8*cl.s,22*cl.s,0,Math.PI*2); ctx.arc(cl.x+50*cl.s,cl.y,28*cl.s,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  for (const p of platforms) {
+    ctx.fillStyle=p.color; ctx.fillRect(p.x,p.y,p.w,p.h);
+    // Plain platform — no detail textures
+  }
+
+
+
+  // Draw studio sprites in the game world
+  for (const s of sprites) {
+    if (!s.visible || s.isSpawn) continue;
+    if (s.isGround) {
+      // Ground sprite — full-width strip
+      const gH = s.hitbox.h;
+      const gY = (s._y ?? s.y*(H/180)) - gH;
+      if (s.pixels && s.pixels.some(c => c)) {
+        const tileW = 64;
+        for (let tx = 0; tx < W; tx += tileW) {
+          drawSpritePixels(ctx, s.pixels, tx, gY, tileW, gH, s.sprW||16);
+        }
+      } else {
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(0, gY, W, gH);
+      }
+      continue;
+    }
+    const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
+    const rx = (s._x ?? s.x*(W/276)) - rw/2;
+    const ry = (s._y ?? s.y*(H/180)) - rh;
+    if (s.pixels && s.pixels.some(c => c)) {
+      drawSpritePixels(ctx, s.pixels, rx, ry, rw, rh, s.sprW||16);
+    } else {
+      ctx.fillStyle = '#9e9e9e';
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = '#757575'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(rx, ry, rw, rh);
+    }
+  }
+
+  drawPlayer(player.x,player.y,player.dir,player.frame,player.onGround);
+  drawRemotePlayers();
+
+  if (hintAlpha>0) {
+    ctx.save(); ctx.globalAlpha=Math.min(1,hintAlpha);
+    ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(W/2-130,H-50,260,34,8); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='13px Segoe UI'; ctx.textAlign='center';
+    ctx.fillText('WASD / Arrows to move  •  Space / W to jump',W/2,H-28);
+    ctx.textAlign='left'; ctx.restore();
+  }
+
+  if (showFPS) {
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(10,55,80,22);
+    ctx.fillStyle='#0f0'; ctx.font='13px monospace'; ctx.fillText('FPS: '+fps,14,71);
+  }
+}
+
+// Shared player drawing — works on any canvas context at any scale
+function drawPlayerOnCtx(c, x, y, dir, frame, onGround, pw, ph) {
+  c.save(); c.translate(x+pw/2, y); if(dir<0) c.scale(-1,1);
+  c.fillStyle='rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(0,ph+2,10,4,0,0,Math.PI*2); c.fill();
+  const legOff=[[-5,0],[-5,0],[-2,-3],[2,-3]];
+  const lo=onGround?legOff[frame%4]:[0,0];
+  c.fillStyle='#1565c0'; c.fillRect(-8+(lo[0]||0),22+(lo[1]||0),7,14); c.fillRect(1-(lo[0]||0),22-(lo[1]||0),7,14);
+  const bg=c.createLinearGradient(-8,8,8,22); bg.addColorStop(0,'#e53935'); bg.addColorStop(1,'#b71c1c');
+  c.fillStyle=bg; c.fillRect(-9,8,18,16);
+  c.fillStyle='rgba(255,255,255,0.3)'; c.fillRect(-9,12,18,4);
+  const arm=onGround?Math.sin(frame/4*Math.PI)*4:0;
+  c.fillStyle='#ffcdd2'; c.fillRect(-13,10+arm,5,10); c.fillRect(8,10-arm,5,10);
+  const hg=c.createRadialGradient(-2,-3,2,0,0,12); hg.addColorStop(0,'#ffe0b2'); hg.addColorStop(1,'#ffb74d');
+  c.fillStyle=hg; c.beginPath(); c.roundRect(-8,-14,16,14,3); c.fill();
+  c.fillStyle='#333'; c.fillRect(-4,-11,3,3); c.fillRect(2,-11,3,3);
+  c.fillStyle='#fff'; c.fillRect(-3,-10,1,1); c.fillRect(3,-10,1,1);
+  c.fillStyle='#e53935'; c.fillRect(-8,-14,16,4); c.fillRect(-5,-20,10,8);
+  c.fillStyle='#fff'; c.fillRect(-5,-14,16,2);
+  c.restore();
+}
+
+function drawPlayer(x,y,dir,frame,onGround) {
+  drawPlayerOnCtx(ctx,x,y,dir,frame,onGround,player.w,player.h);
+  // Nametag in multiplayer
+  if(mpActive && currentUser) {
+    ctx.save();
+    ctx.font = 'bold 10px Segoe UI,sans-serif';
+    const ntw = ctx.measureText(currentUser).width;
+    const nx = x + player.w/2 - ntw/2 - 5;
+    const ny = y - 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(nx, ny, ntw + 10, 16, 4); ctx.fill();
+    ctx.fillStyle = '#4caf50';
+    ctx.fillText(currentUser, nx + 5, ny + 12);
+    ctx.restore();
+  }
+  // Speech bubble (drawn separately in player coordinate space)
+  if (player.bubble && player.bubble.frames > 0) {
+    ctx.save(); ctx.translate(x+player.w/2, y); if(dir<0) ctx.scale(-1,1);
+    const txt = player.bubble.text;
+    const alpha = Math.min(1, player.bubble.frames / 30);
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 11px Segoe UI,sans-serif';
+    const tw = ctx.measureText(txt).width;
+    const bw = Math.max(tw + 14, 40), bh = 20;
+    const bx = -bw/2, by = -38 - bh;
+    // Bubble background
+    ctx.fillStyle = 'rgba(255,255,255,0.93)';
+    ctx.beginPath();
+    ctx.roundRect(bx, by, bw, bh, 6);
+    ctx.fill();
+    // Bubble tail
+    ctx.beginPath();
+    ctx.moveTo(-5, by + bh);
+    ctx.lineTo(5, by + bh);
+    ctx.lineTo(0, by + bh + 6);
+    ctx.closePath(); ctx.fill();
+    // Name tag
+    ctx.fillStyle = '#ff8c00';
+    ctx.font = 'bold 8px Segoe UI,sans-serif';
+    ctx.fillText(currentUser || '', bx + 7, by + 9);
+    // Message
+    ctx.fillStyle = '#222';
+    ctx.font = 'bold 11px Segoe UI,sans-serif';
+    ctx.fillText(txt, bx + 7, by + bh - 5);
+    ctx.restore();
+    player.bubble.frames--;
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  AUDIO
+// ════════════════════════════════════════════════════════
+let audioCtx;
+function getAudio() { if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
+function playTone(freq,dur,type='sine') {
+  if(!sfxOn) return;
+  try { const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain(); o.connect(g);g.connect(ac.destination); o.frequency.value=freq;o.type=type; g.gain.setValueAtTime(0.2,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur); o.start();o.stop(ac.currentTime+dur); } catch(e){}
+}
+function playBoing() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(200,ac.currentTime);o.frequency.exponentialRampToValueAtTime(600,ac.currentTime+0.15);g.gain.setValueAtTime(0.3,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.start();o.stop(ac.currentTime+0.2);}catch(e){} }
+function playBoom() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(150,ac.currentTime);o.frequency.exponentialRampToValueAtTime(30,ac.currentTime+0.3);g.gain.setValueAtTime(0.5,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.3);o.type='sawtooth';o.start();o.stop(ac.currentTime+0.3);}catch(e){} }
+
+// ════════════════════════════════════════════════════════
+//  CHAT
+// ════════════════════════════════════════════════════════
+const CHAT_KEY = 'bw_chat';
+const CHAT_MAX = 40;
+let chatVisible = true;
+
+function loadChatMsgs() {
+  try { return JSON.parse(localStorage.getItem(CHAT_KEY) || '[]'); } catch { return []; }
+}
+
+const CHAT_TTL = 60000; // messages vanish after 60 s
+
+function renderChat() {
+  const log = document.getElementById('chatLog');
+  if (!log) return;
+  const now = Date.now();
+  // Filter out expired messages and save back
+  const all = loadChatMsgs();
+  const live = all.filter(m => now - m.t < CHAT_TTL);
+  if (live.length !== all.length) localStorage.setItem(CHAT_KEY, JSON.stringify(live));
+  log.innerHTML = live.map(m => {
+    const isSelf = m.user === currentUser;
+    const secsLeft = Math.ceil((CHAT_TTL - (now - m.t)) / 1000);
+    const fade = secsLeft < 10 ? `opacity:${(secsLeft/10).toFixed(2)}` : '';
+    return `<div class="chat-msg${isSelf?' chat-self':''}" style="${fade}"><span class="chat-name">${escHtml(m.user)}</span>${escHtml(m.text)}</div>`;
+  }).join('');
+  log.scrollTop = log.scrollHeight;
+}
+// Re-render every 5 s so expired messages fade+vanish automatically
+setInterval(renderChat, 5000);
+
+const BAD_WORDS = [
+  'fuck','fucking','ass','asshole','nigga','nigger','niggers',
+  'north korea','bullshit','horny','daddy','mommy','shit',
+  'dick','dicks','pussy','pussies','anus','dickhole','porn','xxx','suck'
+];
+function filterChat(text) {
+  let out = text;
+  BAD_WORDS.forEach(w => {
+    const hashes = '#'.repeat(w.length);
+    out = out.replace(new RegExp(w.replace(/\s+/g,'\\s+'), 'gi'), hashes);
+  });
+  return out;
+}
+
+function sendChat(text) {
+  text = filterChat(text.trim());
+  if (!text || !currentUser) return;
+  const msgs = loadChatMsgs();
+  msgs.push({ user: currentUser, text, t: Date.now() });
+  localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-CHAT_MAX)));
+  renderChat();
+  // Speech bubble on player
+  player.bubble = { text: text.slice(0, 42), frames: 210 };
+  // Send over network
+  if(mpActive) {
+    if(mpIsHost) {
+      mpBroadcast({ type: 'chat', name: currentUser, text });
+    } else {
+      mpConns.forEach(c => { try { c.send({ type: 'chat', name: currentUser, text }); } catch(e){} });
+    }
+  }
+}
+
+// Cross-tab: hear other players' messages
+window.addEventListener('storage', e => { if (e.key === CHAT_KEY) renderChat(); });
+
+// Enter key in game → focus chat (if not already in an input)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const ci = document.getElementById('chatInput');
+    if (document.activeElement === ci) { ci.blur(); return; }
+  }
+  if (e.key === 'Enter') {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT') return;
+    const chatBox = document.getElementById('chatBox');
+    if (chatBox.style.display !== 'none') {
+      e.preventDefault();
+      document.getElementById('chatInput').focus();
+    }
+  }
+});
+
+document.getElementById('chatForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = document.getElementById('chatInput');
+  sendChat(inp.value);
+  inp.value = '';
+  inp.blur();
+});
+
+document.getElementById('chatToggleBtn').addEventListener('click', () => {
+  chatVisible = !chatVisible;
+  const box = document.getElementById('chatBox');
+  box.style.display = chatVisible ? 'flex' : 'none';
+  document.getElementById('chatToggleBtn').textContent = chatVisible ? '💬' : '🔇';
+});
+
+function showChat() {
+  chatVisible = true;
+  document.getElementById('chatBox').style.display = 'flex';
+  document.getElementById('chatToggleBtn').style.display = 'block';
+  renderChat();
+}
+
+function hideChat() {
+  document.getElementById('chatBox').style.display = 'none';
+  document.getElementById('chatToggleBtn').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════════
+//  MULTIPLAYER (PeerJS WebRTC)
+// ════════════════════════════════════════════════════════
+let mpPeer = null, mpConns = [], mpIsHost = false, mpRoomId = '', mpActive = false;
+let remotePlayers = {};  // { odeName: { x, y, dir, frame, onGround, name, bubble } }
+const MP_COLORS = ['#ff8c00','#2196f3','#e91e63','#00bcd4','#9c27b0','#ff5722','#009688','#673ab7','#cddc39','#f44336',
+  '#3f51b5','#8bc34a','#ffc107','#607d8b','#e040fb','#00e676','#ff6e40','#448aff','#eeff41','#69f0ae',
+  '#ea80fc','#b2ff59','#ffd740','#40c4ff','#ff4081','#7c4dff','#18ffff','#76ff03','#ffab40','#536dfe'];
+
+function mpGenRoomId() {
+  const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let s = ''; for(let i=0;i<6;i++) s += c[Math.floor(Math.random()*c.length)];
+  return s;
+}
+
+function mpGetColor(name) {
+  let h = 0; for(let i=0;i<name.length;i++) h = ((h<<5)-h)+name.charCodeAt(i);
+  return MP_COLORS[Math.abs(h) % MP_COLORS.length];
+}
+
+// Show multiplayer overlay for multiplayer games
+function mpShowOverlay() {
+  const ov = document.getElementById('mpOverlay');
+  ov.style.display = 'flex';
+  document.getElementById('mpHostPanel').style.display = 'none';
+  document.getElementById('mpJoinPanel').style.display = 'none';
+  document.getElementById('mpStatus').textContent = 'Choose an option';
+}
+
+function mpChoose(mode) {
+  if(mode === 'host') {
+    document.getElementById('mpHostPanel').style.display = 'block';
+    document.getElementById('mpJoinPanel').style.display = 'none';
+    mpHostRoom();
+  } else {
+    document.getElementById('mpHostPanel').style.display = 'none';
+    document.getElementById('mpJoinPanel').style.display = 'block';
+    document.getElementById('mpStatus').textContent = 'Enter the host\'s room code';
+  }
+}
+
+function mpPlaySolo() {
+  document.getElementById('mpOverlay').style.display = 'none';
+  mpActive = false;
+  mpActualStartGame();
+}
+
+function mpHostRoom() {
+  mpIsHost = true;
+  mpRoomId = mpGenRoomId();
+  document.getElementById('mpStatus').textContent = 'Setting up room…';
+  const prefix = 'bw-' + mpRoomId.toLowerCase();
+  mpPeer = new Peer(prefix, { debug: 0 });
+  mpPeer.on('open', () => {
+    document.getElementById('mpRoomCode').textContent = mpRoomId;
+    document.getElementById('mpStatus').textContent = 'Room ready! Waiting for players…';
+    document.getElementById('mpPlayerCount').textContent = 'Players: 1';
+  });
+  mpPeer.on('connection', conn => {
+    conn.on('open', () => {
+      mpConns.push(conn);
+      mpUpdatePlayerCount();
+      conn.on('data', data => mpHostHandleData(conn, data));
+      conn.on('close', () => {
+        mpConns = mpConns.filter(c => c !== conn);
+        if(conn._mpName) { delete remotePlayers[conn._mpName]; mpBroadcastPlayerList(); }
+        mpUpdatePlayerCount();
+      });
+    });
+  });
+  mpPeer.on('error', err => {
+    document.getElementById('mpStatus').textContent = '⚠️ ' + err.type;
+  });
+}
+
+function mpUpdatePlayerCount() {
+  const n = 1 + mpConns.length;
+  document.getElementById('mpPlayerCount').textContent = 'Players: ' + n;
+  mpBroadcastPlayerList();
+}
+
+function mpBroadcastPlayerList() {
+  const names = [currentUser, ...mpConns.map(c => c._mpName || '?')];
+  const badge = document.getElementById('mpPlayersBadge');
+  if(badge && mpActive) { badge.textContent = '👥 ' + names.length + ' players'; badge.style.display = 'block'; }
+  mpBroadcast({ type: 'players', names });
+}
+
+function copyRoomCode() {
+  navigator.clipboard.writeText(mpRoomId).then(() => showToast('📋 Room code copied!')).catch(()=>{});
+}
+
+function mpStartGame() {
+  mpActive = true;
+  document.getElementById('mpOverlay').style.display = 'none';
+  // Tell all clients to start
+  mpBroadcast({ type: 'start' });
+  mpActualStartGame();
+  mpBroadcastPlayerList();
+}
+
+function mpJoinRoom() {
+  const code = document.getElementById('mpJoinInput').value.trim().toUpperCase();
+  if(!code || code.length < 4) { document.getElementById('mpJoinStatus').textContent = '⚠️ Enter a valid code'; return; }
+  document.getElementById('mpJoinStatus').textContent = 'Connecting…';
+  mpIsHost = false;
+  mpRoomId = code;
+  const prefix = 'bw-' + code.toLowerCase();
+  mpPeer = new Peer(undefined, { debug: 0 });
+  mpPeer.on('open', () => {
+    const conn = mpPeer.connect(prefix, { reliable: true });
+    conn.on('open', () => {
+      mpConns = [conn];
+      conn.send({ type: 'join', name: currentUser });
+      document.getElementById('mpJoinStatus').textContent = '✓ Connected! Waiting for host to start…';
+      conn.on('data', data => mpClientHandleData(data));
+      conn.on('close', () => {
+        mpConns = [];
+        remotePlayers = {};
+        showToast('❌ Disconnected from host');
+        document.getElementById('mpPlayersBadge').style.display = 'none';
+      });
+    });
+    conn.on('error', () => {
+      document.getElementById('mpJoinStatus').textContent = '⚠️ Could not connect. Check the code.';
+    });
+  });
+  mpPeer.on('error', err => {
+    document.getElementById('mpJoinStatus').textContent = '⚠️ ' + (err.type === 'peer-unavailable' ? 'Room not found' : err.type);
+  });
+}
+
+// Host receives data from clients
+function mpHostHandleData(conn, data) {
+  if(data.type === 'join') {
+    conn._mpName = data.name;
+    mpUpdatePlayerCount();
+  } else if(data.type === 'pos') {
+    remotePlayers[data.name] = { x: data.x, y: data.y, dir: data.dir, frame: data.frame, onGround: data.onGround, name: data.name, bubble: data.bubble };
+    // Relay to all other clients
+    mpConns.forEach(c => { if(c !== conn) c.send({ type: 'rpos', ...data }); });
+  } else if(data.type === 'chat') {
+    // Relay chat to all clients
+    mpBroadcast({ type: 'chat', name: data.name, text: data.text });
+    mpReceiveChat(data.name, data.text);
+  }
+}
+
+// Client receives data from host
+function mpClientHandleData(data) {
+  if(data.type === 'start') {
+    mpActive = true;
+    document.getElementById('mpOverlay').style.display = 'none';
+    mpActualStartGame();
+  } else if(data.type === 'rpos') {
+    remotePlayers[data.name] = { x: data.x, y: data.y, dir: data.dir, frame: data.frame, onGround: data.onGround, name: data.name, bubble: data.bubble };
+  } else if(data.type === 'hpos') {
+    // Host position
+    remotePlayers[data.name] = { x: data.x, y: data.y, dir: data.dir, frame: data.frame, onGround: data.onGround, name: data.name, bubble: data.bubble };
+  } else if(data.type === 'players') {
+    const badge = document.getElementById('mpPlayersBadge');
+    if(badge) { badge.textContent = '👥 ' + data.names.length + ' players'; badge.style.display = 'block'; }
+  } else if(data.type === 'chat') {
+    mpReceiveChat(data.name, data.text);
+  }
+}
+
+function mpReceiveChat(name, text) {
+  const msgs = loadChatMsgs();
+  msgs.push({ user: name, text, t: Date.now() });
+  localStorage.setItem(CHAT_KEY, JSON.stringify(msgs.slice(-CHAT_MAX)));
+  renderChat();
+  // Show bubble on remote player
+  if(remotePlayers[name]) remotePlayers[name].bubble = { text: text.slice(0,42), frames: 210 };
+}
+
+function mpBroadcast(data) {
+  mpConns.forEach(c => { try { c.send(data); } catch(e){} });
+}
+
+// Send local player position to peers (called from game loop)
+function mpSendPosition() {
+  if(!mpActive || mpConns.length === 0) return;
+  const data = {
+    type: mpIsHost ? 'hpos' : 'pos',
+    name: currentUser,
+    x: player.x, y: player.y,
+    dir: player.dir, frame: player.frame,
+    onGround: player.onGround,
+    bubble: player.bubble && player.bubble.frames > 0 ? { text: player.bubble.text, frames: player.bubble.frames } : null
+  };
+  mpConns.forEach(c => { try { c.send(data); } catch(e){} });
+}
+
+// Draw all remote players
+function drawRemotePlayers() {
+  for (const name in remotePlayers) {
+    const rp = remotePlayers[name];
+    if(!rp) continue;
+    const col = mpGetColor(name);
+    // Draw player body
+    drawPlayerOnCtx(ctx, rp.x, rp.y, rp.dir, rp.frame, rp.onGround, player.w, player.h);
+    // Nametag above head
+    ctx.save();
+    ctx.font = 'bold 10px Segoe UI,sans-serif';
+    const tw = ctx.measureText(name).width;
+    const nx = rp.x + player.w/2 - tw/2 - 5;
+    const ny = rp.y - 22;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath(); ctx.roundRect(nx, ny, tw + 10, 16, 4); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.fillText(name, nx + 5, ny + 12);
+    ctx.restore();
+    // Speech bubble
+    if(rp.bubble && rp.bubble.frames > 0) {
+      ctx.save();
+      ctx.translate(rp.x + player.w/2, rp.y);
+      if(rp.dir < 0) ctx.scale(-1,1);
+      const txt = rp.bubble.text;
+      const alpha = Math.min(1, rp.bubble.frames / 30);
+      ctx.globalAlpha = alpha;
+      ctx.font = 'bold 11px Segoe UI,sans-serif';
+      const btw = ctx.measureText(txt).width;
+      const bw = Math.max(btw + 14, 40), bh = 20;
+      const bx = -bw/2, by = -38 - bh;
+      ctx.fillStyle = 'rgba(255,255,255,0.93)';
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-5, by+bh); ctx.lineTo(5, by+bh); ctx.lineTo(0, by+bh+6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = col;
+      ctx.font = 'bold 8px Segoe UI,sans-serif';
+      ctx.fillText(name, bx+7, by+9);
+      ctx.fillStyle = '#222';
+      ctx.font = 'bold 11px Segoe UI,sans-serif';
+      ctx.fillText(txt, bx+7, by+bh-5);
+      ctx.restore();
+      rp.bubble.frames--;
+    }
+  }
+}
+
+function mpActualStartGame() {
+  initWorld();
+  lastTime = performance.now();
+  gameAF = requestAnimationFrame(gameLoop);
+}
+
+function mpCleanup() {
+  mpActive = false;
+  remotePlayers = {};
+  if(mpPeer) { mpPeer.destroy(); mpPeer = null; }
+  mpConns = [];
+  mpIsHost = false;
+  mpRoomId = '';
+  document.getElementById('mpPlayersBadge').style.display = 'none';
+}
+
+let mpSendTimer = 0;
+
+// ── Mobile D-pad ──
+const isTouchDevice = () => window.matchMedia('(pointer:coarse)').matches || navigator.maxTouchPoints > 0;
+
+function showMobileControls() {
+  if (isTouchDevice()) document.getElementById('mobileControls').classList.add('visible');
+}
+function hideMobileControls() {
+  document.getElementById('mobileControls').classList.remove('visible');
+  // Clear all dpad keys when hiding
+  keys['KeyA']=false; keys['KeyD']=false; keys['Space']=false;
+}
+
+function dpadDown(dir) {
+  document.getElementById('btn'+dir.charAt(0).toUpperCase()+dir.slice(1)).classList.add('pressed');
+  if(dir==='left')  keys['KeyA']=true;
+  if(dir==='right') keys['KeyD']=true;
+  if(dir==='jump')  keys['Space']=true;
+}
+function dpadUp(dir) {
+  document.getElementById('btn'+dir.charAt(0).toUpperCase()+dir.slice(1)).classList.remove('pressed');
+  if(dir==='left')  keys['KeyA']=false;
+  if(dir==='right') keys['KeyD']=false;
+  if(dir==='jump')  keys['Space']=false;
+}
+// Safety: clear all dpad keys if finger leaves screen
+document.getElementById('mobileControls').addEventListener('touchcancel', () => {
+  keys['KeyA']=false; keys['KeyD']=false; keys['Space']=false;
+  ['btnLeft','btnRight','btnJump'].forEach(id=>document.getElementById(id).classList.remove('pressed'));
+});
+
+// ════════════════════════════════════════════════════════
+//  GAME SETTINGS MODAL
+// ════════════════════════════════════════════════════════
+document.getElementById('settingsBtn').addEventListener('click', () => document.getElementById('settingsModal').classList.add('open'));
+document.getElementById('settingsModal').addEventListener('click', e => { if(e.target===document.getElementById('settingsModal')) document.getElementById('settingsModal').classList.remove('open'); });
+document.getElementById('closeSettingsBtn').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
+document.getElementById('fpsToggle').addEventListener('change', e => { showFPS=e.target.checked; });
+document.getElementById('sfxToggle').addEventListener('change', e => { sfxOn=e.target.checked; });
+document.getElementById('musicToggle').addEventListener('change', e => { musicOn=e.target.checked; });
+document.getElementById('openStudioBtn').addEventListener('click', () => {
+  document.getElementById('settingsModal').classList.remove('open');
+  cancelAnimationFrame(gameAF);
+  document.getElementById('settingsBtn').style.display = 'none';
+  document.getElementById('backToBrowseBtn').style.display = 'none';
+  showMapChooser();
+});
+
+let studioMapType = 'ground'; // 'empty' | 'ground'
+
+function showMapChooser() {
+  const modal = document.getElementById('mapChooserModal');
+  modal.style.display = 'flex';
+  // Draw previews after a tick so canvases are visible
+  requestAnimationFrame(() => {
+    drawMapPreview(document.getElementById('mapPreviewEmpty').getContext('2d'), 190, 120, 'empty');
+    drawMapPreview(document.getElementById('mapPreviewGround').getContext('2d'), 190, 120, 'ground');
+  });
+}
+
+function selectMap(type) {
+  studioMapType = type;
+  // Add or remove Ground sprite based on map type
+  const hasGround = sprites.some(s => s.isGround);
+  if (type === 'ground' && !hasGround) {
+    sprites.push({name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true});
+  } else if (type === 'empty' && hasGround) {
+    sprites = sprites.filter(s => !s.isGround);
+    if (selectedSprite >= sprites.length) selectedSprite = sprites.length - 1;
+  }
+  document.getElementById('mapChooserModal').style.display = 'none';
+  openStudio(false);
+}
+
+function drawSpawnMarker(ctx, x, y) {
+  ctx.save();
+  ctx.font = '18px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('🚩', x, y);
+  ctx.restore();
+}
+
+function drawMapPreview(ctx, W, H, type) {
+  // Plain background — no stars, no clouds
+  ctx.fillStyle = '#111130';
+  ctx.fillRect(0, 0, W, H);
+  if (type === 'ground') {
+    // Flat ground only — nothing else
+    ctx.fillStyle = '#888888'; ctx.fillRect(0, H - 18, W, 18);
+    drawSpawnMarker(ctx, 30, H - 22);
+  } else {
+    // Empty — just plain background and spawn
+    drawSpawnMarker(ctx, W / 2, H / 2 + 10);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  STUDIO
+// ════════════════════════════════════════════════════════
+const categories = [
+  {name:'Events',color:'#e6a817',blocks:[
+    {id:'flag',label:'🚩 When flag clicked'},
+    {id:'key_press',label:'⌨️ When',inputs:[{type:'select',opts:['Space','ArrowLeft','ArrowRight','ArrowUp'],name:'key'}],suffix:'key pressed'},
+  ]},
+  {name:'Motion',color:'#4c97ff',blocks:[
+    {id:'move_x',label:'Move',inputs:[{type:'number',val:10,name:'steps'}],suffix:'steps right'},
+    {id:'move_y',label:'Move',inputs:[{type:'number',val:10,name:'steps'}],suffix:'steps down'},
+    {id:'goto_xy',label:'Go to x:',inputs:[{type:'number',val:0,name:'x'}],mid:'y:',inputs2:[{type:'number',val:0,name:'y'}]},
+    {id:'set_x',label:'Set x to',inputs:[{type:'number',val:0,name:'x'}]},
+    {id:'set_y',label:'Set y to',inputs:[{type:'number',val:0,name:'y'}]},
+    {id:'bounce',label:'↩️ If on edge, bounce'},
+  ]},
+  {name:'Looks',color:'#9966ff',blocks:[
+    {id:'say',label:'Say',inputs:[{type:'text',val:'Hello!',name:'msg'}]},
+    {id:'set_size',label:'Set size to',inputs:[{type:'number',val:100,name:'size'}],suffix:'%'},
+    {id:'change_color',label:'🎨 Set color to',inputs:[{type:'color',val:'#ff4444',name:'color'}]},
+    {id:'show',label:'👁️ Show'},
+    {id:'hide',label:'🙈 Hide'},
+  ]},
+  {name:'Control',color:'#ffab19',blocks:[
+    {id:'wait',label:'⏱ Wait',inputs:[{type:'number',val:1,name:'secs'}],suffix:'secs'},
+    {id:'repeat',label:'🔁 Repeat',inputs:[{type:'number',val:10,name:'times'}]},
+    {id:'forever',label:'∞ Forever'},
+    {id:'if_edge',label:'If touching edge'},
+    {id:'stop',label:'🛑 Stop all'},
+  ]},
+  {name:'Sound',color:'#cf63cf',blocks:[
+    {id:'play_sound',label:'🔊 Play sound',inputs:[{type:'select',opts:['pop','boing','boom'],name:'sound'}]},
+    {id:'set_volume',label:'🔉 Set volume to',inputs:[{type:'number',val:100,name:'vol'}],suffix:'%'},
+  ]},
+];
+
+let currentCat=0;
+let sprites=[
+  {name:'Spawn',x:50,y:135,color:'#4caf50',size:1,visible:true,saying:'',solid:false,isSpawn:true,gravity:false,hitbox:{w:24,h:24}},
+  {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true},
+];
+let selectedSprite=0;
+let isRunning=false;
+let studioAF;
+
+function resetStudioForNewGame() {
+  sprites=[
+    {name:'Spawn',x:50,y:135,color:'#4caf50',size:1,visible:true,saying:'',solid:false,isSpawn:true,gravity:false,hitbox:{w:24,h:24}},
+    {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true},
+  ];
+  studioMapType='ground';
+  selectedSprite=0;
+  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e=>e.remove());
+  updateHint();
+  // Reset game settings
+  document.getElementById('gsName').value='My Game';
+  document.getElementById('gsMultiplayer').checked=false;
+  document.getElementById('gsMaxPlayers').value=4;
+  document.getElementById('maxPlayersRow').style.display='none';
+  document.getElementById('gsSpeedSlider').value=4; document.getElementById('gsSpeedNum').value=4;
+  document.getElementById('gsGravSlider').value=0.55; document.getElementById('gsGravNum').value=0.55;
+  document.getElementById('gsJumpSlider').value=13; document.getElementById('gsJumpNum').value=13;
+  SPEED=4; GRAVITY=0.55; JUMP_FORCE=13;
+  mapW=800; mapH=450;
+  document.getElementById('gsMapW').value=800; document.getElementById('gsMapH').value=450;
+  resize();
+  bgType='animation'; bgAnimPreset='night'; bgDataURL=''; bgImageEl=null; bgHasVideo=false;
+  bgVideoEl.removeAttribute('src');
+  document.getElementById('bgPhotoPreview').style.display='none';
+  document.getElementById('bgVideoName').textContent='No video chosen';
+  document.getElementById('gsBgAnim').value='night';
+  setBgTab('animation');
+}
+
+function loadStudioFromGame(g) {
+  if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
+  if (g.mapType) studioMapType = g.mapType;
+  selectedSprite=0;
+  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e=>e.remove());
+  if (g.blocks) restoreScriptBlocks(g.blocks);
+  updateHint();
+}
+
+function openStudio(fromBrowse) {
+  cancelAnimationFrame(gameAF);
+  document.getElementById('studioScreen').classList.add('open');
+  buildCatTabs(); buildBlockList(); buildSpriteList(); updateHint();
+  switchRightTab('sprites');
+  studioLoop();
+}
+
+function switchRightTab(tab) {
+  document.getElementById('tabSprites').classList.toggle('active', tab==='sprites');
+  document.getElementById('tabSettings').classList.toggle('active', tab==='settings');
+  document.getElementById('spritesPane').classList.toggle('active', tab==='sprites');
+  document.getElementById('gameSettingsPane').classList.toggle('active', tab==='settings');
+}
+
+document.getElementById('backBtn').addEventListener('click', () => {
+  cancelAnimationFrame(studioAF);
+  document.getElementById('studioScreen').classList.remove('open');
+  showBrowse();
+});
+
+document.getElementById('publishBtn').addEventListener('click', () => {
+  switchRightTab('settings');
+  publishGame();
+});
+
+document.getElementById('runBtn').addEventListener('click', () => { getAudio(); executeBlocks(); });
+document.getElementById('stopBtn').addEventListener('click', stopExecution);
+
+// ── Palette ──
+function buildCatTabs() {
+  const el=document.getElementById('catTabs'); el.innerHTML='';
+  categories.forEach((c,i) => {
+    const btn=document.createElement('button');
+    btn.className='cat-tab'+(i===currentCat?' active':'');
+    btn.textContent=c.name; btn.style.background=c.color;
+    btn.onclick=()=>{currentCat=i;buildCatTabs();buildBlockList();};
+    el.appendChild(btn);
+  });
+}
+
+function buildBlockList() {
+  const el=document.getElementById('blockList'); el.innerHTML='';
+  const cat=categories[currentCat];
+  cat.blocks.forEach(b => {
+    const div=document.createElement('div');
+    div.className='palette-block'; div.style.background=cat.color;
+    div.innerHTML=buildBlockHTML(b,true);
+    div.addEventListener('mousedown',e=>startPaletteDrag(e,b,cat.color));
+    el.appendChild(div);
+  });
+}
+
+function buildBlockHTML(b,isTemplate) {
+  let html=b.label||'';
+  if (b.inputs) b.inputs.forEach(inp=>{html+=' '+makeInput(inp,isTemplate);});
+  if (b.mid) html+=' '+b.mid;
+  if (b.inputs2) b.inputs2.forEach(inp=>{html+=' '+makeInput(inp,isTemplate);});
+  if (b.suffix) html+=' '+b.suffix;
+  return html;
+}
+
+function makeInput(inp,isT) {
+  const stop=isT?'onclick="event.stopPropagation()"':'';
+  const stopSel=isT?'onmousedown="event.stopPropagation()"':'';
+  if(inp.type==='number') return `<input class="pb-input" type="number" value="${inp.val||0}" data-name="${inp.name}" ${stop}>`;
+  if(inp.type==='text') return `<input class="pb-input" type="text" value="${inp.val||''}" data-name="${inp.name}" style="width:60px" ${stop}>`;
+  if(inp.type==='color') return `<input type="color" value="${inp.val||'#ff0000'}" data-name="${inp.name}" style="width:28px;height:22px;border:none;border-radius:3px;cursor:pointer;background:none" ${stop}>`;
+  if(inp.type==='select') return `<select class="pb-select" data-name="${inp.name}" ${stopSel}>${inp.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+  return '';
+}
+
+// ── Drag from palette ──
+let dragData=null;
+const ghost=document.getElementById('dragGhost');
+let blockUidCounter=0;
+const SNAP_DIST=28;
+
+function startPaletteDrag(e,blockDef,color) {
+  e.preventDefault();
+  dragData={blockDef,color};
+  ghost.style.background=color; ghost.style.display='flex';
+  ghost.innerHTML=buildBlockHTML(blockDef,false);
+  moveDragGhost(e.clientX,e.clientY);
+}
+
+document.addEventListener('mousemove',e=>{if(!dragData)return;moveDragGhost(e.clientX,e.clientY);});
+document.addEventListener('mouseup',e=>{
+  if(!dragData)return;
+  const sa=document.getElementById('scriptArea');
+  const rect=sa.getBoundingClientRect();
+  if(e.clientX>=rect.left&&e.clientX<=rect.right&&e.clientY>=rect.top&&e.clientY<=rect.bottom) {
+    dropBlock(dragData.blockDef,dragData.color,e.clientX-rect.left-60,e.clientY-rect.top-15);
+  }
+  ghost.style.display='none'; dragData=null;
+});
+
+function moveDragGhost(x,y){ghost.style.left=(x-60)+'px';ghost.style.top=(y-15)+'px';}
+
+function allScriptBlocks(){return [...document.getElementById('scriptArea').querySelectorAll('.palette-block')];}
+
+function getBlockByUid(uid){return document.getElementById('scriptArea').querySelector(`[data-uid="${uid}"]`);}
+
+// Returns [el, child, grandchild, ...] following snap chain downward
+function getChainBelow(el){
+  const chain=[el];
+  let cur=el;
+  while(true){
+    const uid=cur.dataset.uid;
+    const child=allScriptBlocks().find(b=>b.dataset.snapParent===uid);
+    if(!child) break;
+    chain.push(child); cur=child;
+  }
+  return chain;
+}
+
+// Repositions all blocks snapped below el to stay connected
+function cascadeChain(el){
+  const uid=el.dataset.uid;
+  const child=allScriptBlocks().find(b=>b.dataset.snapParent===uid);
+  if(!child) return;
+  const px=parseInt(el.style.left)||0;
+  const py=parseInt(el.style.top)||0;
+  const ph=el.offsetHeight;
+  child.style.left=px+'px';
+  child.style.top=(py+ph-3)+'px';
+  cascadeChain(child);
+}
+
+// Try snapping el below another block after drag/drop
+function trySnap(el){
+  const ex=parseInt(el.style.left)||0;
+  const ey=parseInt(el.style.top)||0;
+  const eh=el.offsetHeight;
+  // Clear existing snap
+  el.dataset.snapParent='';
+  el.classList.remove('snap-child');
+  let best=null, bestDist=SNAP_DIST;
+  for(const other of allScriptBlocks()){
+    if(other===el) continue;
+    // Prevent snapping to a block already in el's own chain
+    if(getChainBelow(el).includes(other)) continue;
+    const ox=parseInt(other.style.left)||0;
+    const oy=parseInt(other.style.top)||0;
+    const oh=other.offsetHeight;
+    // snap el below other: el top near other bottom
+    const dy=Math.abs(ey-(oy+oh-3));
+    const dx=Math.abs(ex-ox);
+    if(dy<bestDist&&dx<SNAP_DIST*2){bestDist=dy;best=other;}
+  }
+  if(best){
+    const bx=parseInt(best.style.left)||0;
+    const by=parseInt(best.style.top)||0;
+    const bh=best.offsetHeight;
+    // If best already has a child snapped to it, that child gets pushed down after us
+    const existingChild=allScriptBlocks().find(b=>b.dataset.snapParent===best.dataset.uid&&b!==el);
+    el.style.left=bx+'px';
+    el.style.top=(by+bh-3)+'px';
+    el.dataset.snapParent=best.dataset.uid;
+    el.classList.add('snap-child');
+    // Re-cascade: push existingChild below el if there is one
+    if(existingChild){
+      existingChild.dataset.snapParent=el.dataset.uid;
+      existingChild.classList.add('snap-child');
+    }
+    cascadeChain(el);
+  }
+}
+
+function dropBlock(blockDef,color,x,y,savedVals,uid,snapParent){
+  const sa=document.getElementById('scriptArea');
+  const el=document.createElement('div');
+  el.className='palette-block';
+  el.style.cssText=`background:${color};position:absolute;left:${Math.max(0,x)}px;top:${Math.max(0,y)}px;cursor:grab;z-index:10;box-shadow:2px 4px 12px rgba(0,0,0,.4)`;
+  el.dataset.blockId=blockDef.id;
+  el.dataset.uid=uid||('b'+(++blockUidCounter));
+  el.dataset.snapParent=snapParent||'';
+  if(snapParent) el.classList.add('snap-child');
+  el.innerHTML=buildBlockHTML(blockDef,false);
+  if(savedVals){
+    el.querySelectorAll('[data-name]').forEach(inp=>{
+      if(savedVals[inp.dataset.name]!==undefined) inp.value=savedVals[inp.dataset.name];
+    });
+  }
+  el.addEventListener('mousedown',e=>{if(e.button!==0||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;startBlockDrag(e,el);});
+  el.addEventListener('contextmenu',e=>{
+    e.preventDefault();
+    // Detach children: give them no parent (they float free)
+    const uid=el.dataset.uid;
+    allScriptBlocks().forEach(b=>{if(b.dataset.snapParent===uid){b.dataset.snapParent='';b.classList.remove('snap-child');}});
+    el.remove(); updateHint();
+  });
+  sa.appendChild(el); updateHint();
+  // Try snapping after render (need offsetHeight)
+  requestAnimationFrame(()=>{ if(!snapParent) trySnap(el); });
+}
+
+function startBlockDrag(e,el){
+  e.preventDefault();
+  const sa=document.getElementById('scriptArea');
+  const saRect=sa.getBoundingClientRect();
+  // Detach from parent chain
+  el.dataset.snapParent='';
+  el.classList.remove('snap-child');
+  // Get chain below this block so it moves with it
+  const chain=getChainBelow(el);
+  const startPositions=chain.map(b=>({left:parseInt(b.style.left)||0,top:parseInt(b.style.top)||0}));
+  const startMX=e.clientX, startMY=e.clientY-saRect.top;
+  chain.forEach(b=>b.style.zIndex=100);
+  const mm=ev=>{
+    const dx=ev.clientX-startMX, dy=(ev.clientY-saRect.top)-startMY;
+    chain.forEach((b,i)=>{
+      b.style.left=Math.max(0,startPositions[i].left+dx)+'px';
+      b.style.top=Math.max(0,startPositions[i].top+dy)+'px';
+    });
+    // Snap highlight: show glow on potential snap target
+    highlightSnapTarget(el);
+  };
+  const mu=()=>{
+    chain.forEach(b=>b.style.zIndex=10);
+    clearSnapHighlight();
+    trySnap(el);
+    document.removeEventListener('mousemove',mm);
+    document.removeEventListener('mouseup',mu);
+  };
+  document.addEventListener('mousemove',mm);
+  document.addEventListener('mouseup',mu);
+}
+
+function highlightSnapTarget(el){
+  clearSnapHighlight();
+  const ex=parseInt(el.style.left)||0, ey=parseInt(el.style.top)||0;
+  for(const other of allScriptBlocks()){
+    if(other===el||getChainBelow(el).includes(other)) continue;
+    const ox=parseInt(other.style.left)||0, oy=parseInt(other.style.top)||0, oh=other.offsetHeight;
+    if(Math.abs(ey-(oy+oh-3))<SNAP_DIST*1.5&&Math.abs(ex-ox)<SNAP_DIST*2){
+      other.classList.add('snap-target'); break;
+    }
+  }
+}
+function clearSnapHighlight(){allScriptBlocks().forEach(b=>b.classList.remove('snap-target'));}
+
+function updateHint(){
+  const blocks=document.getElementById('scriptArea').querySelectorAll('.palette-block');
+  document.getElementById('emptyHint').style.display=blocks.length===0?'block':'none';
+}
+
+// Save/restore
+function getScriptBlocksData(){
+  return allScriptBlocks().map(el=>{
+    const vals={};
+    el.querySelectorAll('[data-name]').forEach(inp=>{vals[inp.dataset.name]=inp.value;});
+    return {id:el.dataset.blockId,uid:el.dataset.uid,snapParent:el.dataset.snapParent||'',x:parseInt(el.style.left)||0,y:parseInt(el.style.top)||0,color:el.style.background,vals};
+  });
+}
+
+function restoreScriptBlocks(blocks){
+  // First pass: create all blocks without snap
+  blocks.forEach(b=>{
+    const cat=categories.find(c=>c.blocks.find(bl=>bl.id===b.id));
+    if(!cat) return;
+    const blockDef=cat.blocks.find(bl=>bl.id===b.id);
+    dropBlock(blockDef,b.color||cat.color,b.x,b.y,b.vals,b.uid,b.snapParent||'');
+  });
+  // Second pass: cascade chains to fix positions
+  requestAnimationFrame(()=>{
+    allScriptBlocks().filter(b=>!b.dataset.snapParent).forEach(root=>cascadeChain(root));
+  });
+}
+
+// ── Script Execution ──
+// Finds all chain roots, sorted rightmost-first (highest X = runs first)
+function getBlocksInOrder(){
+  const blocks=allScriptBlocks();
+  // Roots = blocks with no snapParent (or snapParent not found)
+  const roots=blocks.filter(b=>{
+    const p=b.dataset.snapParent;
+    return !p||!blocks.find(o=>o.dataset.uid===p);
+  });
+  // Sort roots by X descending (rightmost first)
+  roots.sort((a,b)=>(parseInt(b.style.left)||0)-(parseInt(a.style.left)||0));
+  // Flatten: for each root, follow chain downward
+  return roots.flatMap(root=>getChainBelow(root));
+}
+
+function getBlockParams(el) {
+  const p={};
+  el.querySelectorAll('[data-name]').forEach(inp=>{p[inp.dataset.name]=inp.type==='number'?parseFloat(inp.value)||0:inp.value;});
+  return p;
+}
+
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function executeBlocks() {
+  if(isRunning) return;
+  isRunning=true; showToast('▶ Running script...');
+  const blocks=getBlocksInOrder();
+  const spr=sprites[selectedSprite];
+  const W=276,H=180;
+  for (const el of blocks) {
+    if(!isRunning) break;
+    const id=el.dataset.blockId, p=getBlockParams(el);
+    switch(id) {
+      case 'move_x': spr.x+=p.steps; break;
+      case 'move_y': spr.y+=p.steps; break;
+      case 'set_x': spr.x=W/2+p.x; break;
+      case 'set_y': spr.y=H/2+p.y; break;
+      case 'goto_xy': spr.x=W/2+p.x;spr.y=H/2+p.y; break;
+      case 'bounce': if(spr.x<16||spr.x>W-16||spr.y<16||spr.y>H-16){spr.x=W/2;spr.y=H/2;} break;
+      case 'say': spr.saying=p.msg; setTimeout(()=>{spr.saying='';},1500); break;
+      case 'set_size': spr.size=(p.size||100)/100; break;
+      case 'change_color': spr.color=p.color; break;
+      case 'show': spr.visible=true; break;
+      case 'hide': spr.visible=false; break;
+      case 'wait': await sleep((p.secs||1)*1000); break;
+      case 'repeat': for(let i=0;i<(p.times||1);i++){if(!isRunning)break;spr.x+=5;await sleep(100);} break;
+      case 'forever': while(isRunning){spr.x+=2;if(spr.x>W)spr.x=0;await sleep(50);} break;
+      case 'stop': isRunning=false; break;
+      case 'play_sound': if(p.sound==='boing')playBoing();else if(p.sound==='boom')playBoom();else playTone(600,0.12,'sine'); break;
+    }
+    if(id!=='wait'&&id!=='repeat'&&id!=='forever') await sleep(80);
+  }
+  isRunning=false;
+}
+
+function stopExecution(){isRunning=false;sprites.forEach(s=>s.saying='');showToast('■ Stopped');}
+
+// ── Stage ──
+const stageCanvas=document.getElementById('stageCanvas');
+const sCtx=stageCanvas.getContext('2d');
+
+function drawStage() {
+  const W=276, H=180;
+  drawBg(sCtx, W, H, performance.now());
+
+  // Platforms — use same makePlatforms logic scaled to stage size
+  const stagePlats = makePlatforms(W, H);
+  for (const p of stagePlats) {
+    sCtx.fillStyle=p.color; sCtx.fillRect(p.x,p.y,p.w,p.h);
+    // No detail on stage ground
+  }
+
+  // Draw each sprite — Spawn shows as a green flag, others at real sprW×sprH size
+  sprites.forEach((spr, i) => {
+    if(!spr.visible) return;
+    const pw = spr.sprW || 16, ph = spr.sprH || 16;
+    if(spr.name === 'Spawn') {
+      drawSpawnMarker(sCtx, spr.x, spr.y);
+    } else if(spr.isGround) {
+      // Ground sprite — render as full-width strip at its actual height
+      const gH = ph;
+      const gY = spr.y - gH;
+      sCtx.save();
+      if (spr.pixels && spr.pixels.some(c => c)) {
+        const tileW = pw;
+        for (let tx = 0; tx < W; tx += tileW) {
+          drawSpritePixels(sCtx, spr.pixels, tx, gY, tileW, gH, pw);
+        }
+      } else {
+        sCtx.fillStyle = '#888888';
+        sCtx.fillRect(0, gY, W, gH);
+      }
+      sCtx.restore();
+    } else {
+      sCtx.save();
+      if (spr.pixels && spr.pixels.some(c => c)) {
+        drawSpritePixels(sCtx, spr.pixels, spr.x - pw/2, spr.y - ph, pw, ph, pw);
+      } else {
+        sCtx.fillStyle = '#9e9e9e';
+        sCtx.fillRect(spr.x - pw/2, spr.y - ph, pw, ph);
+        sCtx.strokeStyle = '#757575';
+        sCtx.lineWidth = 1;
+        sCtx.strokeRect(spr.x - pw/2, spr.y - ph, pw, ph);
+      }
+      sCtx.restore();
+    }
+
+    // Selection highlight
+    if(i === selectedSprite){
+      sCtx.save();
+      sCtx.strokeStyle='rgba(255,255,255,0.8)'; sCtx.lineWidth=1.5;
+      sCtx.setLineDash([3,2]);
+      if (spr.isGround) {
+        sCtx.strokeRect(-1, spr.y - ph - 2, W + 2, ph + 4);
+      } else {
+        sCtx.strokeRect(spr.x - pw/2 - 2, spr.y - ph - 2, pw + 4, ph + 4);
+      }
+      sCtx.restore();
+    }
+
+    // Name label + size
+    const nameLabel = spr.isGround ? spr.name : spr.name;
+    const sizeLabel = pw + '×' + ph;
+    sCtx.font='7px Segoe UI';
+    const nlW = Math.max(sCtx.measureText(nameLabel).width + 8, 32);
+    const slW = sCtx.measureText(sizeLabel).width + 6;
+    const showSize = (i === selectedSprite);
+    const totalW = showSize ? nlW + slW + 2 : nlW;
+    const lx = spr.isGround ? W/2 - totalW/2 : spr.x - totalW/2;
+    const ly = spr.isGround ? spr.y - ph - 14 : spr.y - ph - 14;
+    // Name bg
+    sCtx.fillStyle='rgba(0,0,0,0.55)'; sCtx.beginPath();
+    sCtx.roundRect(lx, ly, nlW, 12, 3); sCtx.fill();
+    sCtx.fillStyle='#fff'; sCtx.textAlign='center';
+    sCtx.fillText(nameLabel, lx + nlW/2, ly + 9);
+    // Size badge (only for selected)
+    if(showSize) {
+      sCtx.fillStyle='rgba(124,77,255,0.7)'; sCtx.beginPath();
+      sCtx.roundRect(lx + nlW + 2, ly, slW, 12, 3); sCtx.fill();
+      sCtx.fillStyle='#fff';
+      sCtx.fillText(sizeLabel, lx + nlW + 2 + slW/2, ly + 9);
+    }
+    sCtx.textAlign='left';
+  });
+}
+
+// ── Stage sprite drag ──
+let stageDragIdx = -1, stageDragOX = 0, stageDragOY = 0;
+function stagePointerDown(e) {
+  const rect = stageCanvas.getBoundingClientRect();
+  const scaleX = 276 / rect.width, scaleY = 180 / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  for (let i = 0; i < sprites.length; i++) {
+    const s = sprites[i]; if(!s.visible) continue;
+    const pw = s.sprW||16, ph = s.sprH||16;
+    if (mx >= s.x-pw/2 && mx <= s.x+pw/2 && my >= s.y-ph && my <= s.y) {
+      stageDragIdx = i; stageDragOX = mx - s.x; stageDragOY = my - s.y;
+      selectedSprite = i; e.preventDefault(); return;
+    }
+  }
+}
+function stagePointerMove(e) {
+  if (stageDragIdx < 0) return;
+  const rect = stageCanvas.getBoundingClientRect();
+  const scaleX = 276 / rect.width, scaleY = 180 / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  sprites[stageDragIdx].x = Math.max(6, Math.min(270, mx - stageDragOX));
+  sprites[stageDragIdx].y = Math.max(20, Math.min(176, my - stageDragOY));
+  buildSpriteList();
+  e.preventDefault();
+}
+function stagePointerUp() { stageDragIdx = -1; }
+stageCanvas.addEventListener('mousedown', stagePointerDown);
+stageCanvas.addEventListener('mousemove', stagePointerMove);
+document.addEventListener('mouseup', stagePointerUp);
+stageCanvas.addEventListener('touchstart', e => stagePointerDown(e.touches[0]), {passive:false});
+stageCanvas.addEventListener('touchmove',  e => stagePointerMove(e.touches[0]), {passive:false});
+stageCanvas.addEventListener('touchend',   stagePointerUp);
+
+function studioLoop(){drawStage();studioAF=requestAnimationFrame(studioLoop);}
+
+// ── Sprites list ──
+function buildSpriteList() {
+  const el=document.getElementById('spriteList'); el.innerHTML='';
+  sprites.forEach((s,i)=>{
+    const div=document.createElement('div');
+    div.className='sprite-item'+(i===selectedSprite?' selected':'');
+    div.innerHTML=`<div class="sprite-swatch" style="background:${s.color}"></div><div class="sprite-info"><div class="sprite-name">${s.name}</div><div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div></div>`;
+    div.onclick=()=>{selectedSprite=i;buildSpriteList();};
+    el.appendChild(div);
+  });
+  buildSpriteSettings();
+}
+
+function buildSpriteSettings() {
+  const el = document.getElementById('spriteSettings');
+  if(!el || selectedSprite < 0 || selectedSprite >= sprites.length){ if(el) el.innerHTML=''; return; }
+  const spr = sprites[selectedSprite];
+  el.innerHTML = `
+    <h4>⚙ ${spr.name} Settings</h4>
+    <div class="spr-setting-row">
+      <span class="spr-setting-label">Collision</span>
+      <div class="spr-toggle-group">
+        <button class="spr-toggle-btn${spr.solid?' active':''}" onclick="setSprProp('solid',true)">Solid</button>
+        <button class="spr-toggle-btn${!spr.solid?' active':''}" onclick="setSprProp('solid',false)">Noclip</button>
+      </div>
+    </div>
+    <div class="spr-setting-row">
+      <span class="spr-setting-label">Physics</span>
+      <div class="spr-toggle-group">
+        <button class="spr-toggle-btn${spr.gravity?' active':''}" onclick="setSprProp('gravity',true)">Gravity</button>
+        <button class="spr-toggle-btn${!spr.gravity?' active':''}" onclick="setSprProp('gravity',false)">Float</button>
+      </div>
+    </div>
+    <div class="spr-setting-row">
+      <span class="spr-setting-label">Role</span>
+      <div class="spr-toggle-group">
+        <button class="spr-toggle-btn${spr.isSpawn?' active':''}" onclick="setSprProp('isSpawn',true)">Is Spawn</button>
+        <button class="spr-toggle-btn${!spr.isSpawn?' active':''}" onclick="setSprProp('isSpawn',false)">Normal</button>
+      </div>
+    </div>
+    <div class="spr-setting-row">
+      <span class="spr-setting-label">Width</span>
+      <input type="number" min="4" max="800" value="${spr.sprW||16}" onchange="resizeSprite(+this.value, ${spr.sprH||16})" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <span class="spr-setting-label" style="margin-left:8px">Height</span>
+      <input type="number" min="4" max="300" value="${spr.sprH||16}" onchange="resizeSprite(${spr.sprW||16}, +this.value)" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:6px">px</span>
+    </div>
+    <button class="spr-hitbox-btn" onclick="openHitboxEditor()">⬜ Edit Hitbox</button>
+    ${spr.name !== 'Spawn' ? `<button class="spr-hitbox-btn" onclick="openSpriteDrawer()" style="margin-top:6px;background:rgba(124,77,255,.18);border-color:rgba(124,77,255,.5)">🎨 Draw Sprite</button>` : ''}
+    <div class="spr-setting-row" style="margin-top:8px">
+      <span class="spr-setting-label">Name</span>
+      <input type="text" value="${spr.name}" onchange="renameSprite(this.value)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:5px 8px;color:#fff;font-size:.85rem;outline:none">
+    </div>
+    <button class="spr-hitbox-btn" onclick="copySprite()" style="margin-top:8px;background:rgba(33,150,243,.15);border-color:rgba(33,150,243,.5);color:#42a5f5">📋 Copy Sprite</button>
+    <button class="spr-hitbox-btn" onclick="deleteSprite()" style="margin-top:8px;background:rgba(229,57,53,.15);border-color:rgba(229,57,53,.5);color:#ef5350">🗑 Delete Sprite</button>
+  `;
+}
+
+function setSprProp(prop, val) {
+  if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
+  sprites[selectedSprite][prop] = val;
+  buildSpriteSettings();
+}
+
+function renameSprite(name) {
+  if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
+  sprites[selectedSprite].name = name.trim() || sprites[selectedSprite].name;
+  buildSpriteList();
+}
+
+function copySprite() {
+  if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
+  const src = sprites[selectedSprite];
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.name = src.name + ' Copy';
+  copy.x = Math.min(270, src.x + 20);
+  copy.y = src.y;
+  copy.isSpawn = false;
+  sprites.push(copy);
+  selectedSprite = sprites.length - 1;
+  buildSpriteList();
+  showToast('📋 Sprite copied!');
+}
+
+function deleteSprite() {
+  if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
+  if(sprites.length <= 1) { showToast('⚠️ Need at least one sprite'); return; }
+  sprites.splice(selectedSprite, 1);
+  selectedSprite = Math.min(selectedSprite, sprites.length - 1);
+  buildSpriteList();
+}
+
+function resizeSprite(newW, newH) {
+  const spr = sprites[selectedSprite];
+  if (!spr) return;
+  newW = Math.max(4, Math.min(800, Math.round(newW)));
+  newH = Math.max(4, Math.min(300, Math.round(newH)));
+  const oldW = spr.sprW || 16, oldH = spr.sprH || 16;
+  // Resize pixels array — preserve existing art
+  if (spr.pixels) {
+    const np = new Array(newW * newH).fill('');
+    for (let r = 0; r < Math.min(oldH, newH); r++)
+      for (let c = 0; c < Math.min(oldW, newW); c++)
+        np[r * newW + c] = spr.pixels[r * oldW + c] || '';
+    spr.pixels = np;
+  }
+  // Resize hitbox mask
+  if (spr.hitboxMask) {
+    const nm = new Array(newW * newH).fill(false);
+    for (let r = 0; r < Math.min(oldH, newH); r++)
+      for (let c = 0; c < Math.min(oldW, newW); c++)
+        nm[r * newW + c] = spr.hitboxMask[r * oldW + c];
+    spr.hitboxMask = nm;
+  }
+  spr.sprW = newW;
+  spr.sprH = newH;
+  spr.hitbox.w = newW;
+  spr.hitbox.h = newH;
+  buildSpriteSettings();
+}
+
+let _hbPainting = false, _hbErasing = false;
+
+function openHitboxEditor() {
+  const spr = sprites[selectedSprite];
+  if (!spr) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  if (!spr.hitboxMask || spr.hitboxMask.length !== cols * rows) {
+    spr.hitboxMask = new Array(cols * rows).fill(true);
+  }
+  const maxPx = 400;
+  const cell = Math.max(4, Math.min(20, Math.floor(maxPx / Math.max(cols, rows))));
+  const c = document.getElementById('hitboxCanvas');
+  c.width = cols * cell; c.height = rows * cell;
+  c.style.width = c.width + 'px'; c.style.height = c.height + 'px';
+  document.getElementById('hitboxModal').style.display = 'flex';
+  renderHitboxCanvas();
+}
+
+function renderHitboxCanvas() {
+  const spr = sprites[selectedSprite]; if (!spr) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  const c = document.getElementById('hitboxCanvas');
+  const hCtx = c.getContext('2d');
+  const cell = c.width / cols;
+  hCtx.clearRect(0, 0, c.width, c.height);
+  // Checkerboard
+  for (let r = 0; r < rows; r++) {
+    for (let col = 0; col < cols; col++) {
+      hCtx.fillStyle = (r + col) % 2 === 0 ? '#2a2a2a' : '#1e1e1e';
+      hCtx.fillRect(col * cell, r * cell, cell, cell);
+    }
+  }
+  // Ghost sprite pixels
+  if (spr.pixels && spr.pixels.some(c => c)) {
+    hCtx.save(); hCtx.globalAlpha = 0.25;
+    drawSpritePixels(hCtx, spr.pixels, 0, 0, c.width, c.height, cols);
+    hCtx.restore();
+  } else {
+    hCtx.save(); hCtx.globalAlpha = 0.15;
+    hCtx.fillStyle = '#9e9e9e'; hCtx.fillRect(0, 0, c.width, c.height);
+    hCtx.restore();
+  }
+  // Hitbox cells
+  if (spr.hitboxMask) {
+    spr.hitboxMask.forEach((on, i) => {
+      if (!on) return;
+      const col = i % cols, row = Math.floor(i / cols);
+      hCtx.fillStyle = 'rgba(255,60,60,0.55)';
+      hCtx.fillRect(col * cell, row * cell, cell, cell);
+      hCtx.strokeStyle = 'rgba(255,80,80,0.8)'; hCtx.lineWidth = 0.5;
+      hCtx.strokeRect(col * cell, row * cell, cell, cell);
+    });
+  }
+  // Grid lines
+  hCtx.strokeStyle = 'rgba(255,255,255,0.08)'; hCtx.lineWidth = 0.5;
+  for (let i = 0; i <= cols; i++) { hCtx.beginPath(); hCtx.moveTo(i*cell,0); hCtx.lineTo(i*cell,c.height); hCtx.stroke(); }
+  for (let j = 0; j <= rows; j++) { hCtx.beginPath(); hCtx.moveTo(0,j*cell); hCtx.lineTo(c.width,j*cell); hCtx.stroke(); }
+}
+
+function _paintHitboxCell(e) {
+  const spr = sprites[selectedSprite];
+  if (!spr || !spr.hitboxMask) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  const c = document.getElementById('hitboxCanvas');
+  const rect = c.getBoundingClientRect();
+  const scaleX = c.width / rect.width, scaleY = c.height / rect.height;
+  const cell = c.width / cols;
+  const col = Math.floor((e.clientX - rect.left) * scaleX / cell);
+  const row = Math.floor((e.clientY - rect.top) * scaleY / cell);
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return;
+  spr.hitboxMask[row * cols + col] = !_hbErasing;
+  renderHitboxCanvas();
+}
+function hbCanvasDown(e) {
+  const spr = sprites[selectedSprite];
+  const cols = spr ? (spr.sprW || 16) : 16, rows = spr ? (spr.sprH || 16) : 16;
+  const c = document.getElementById('hitboxCanvas');
+  const rect = c.getBoundingClientRect();
+  const scaleX = c.width / rect.width, scaleY = c.height / rect.height;
+  const cell = c.width / cols;
+  const col = Math.floor((e.clientX - rect.left) * scaleX / cell);
+  const row = Math.floor((e.clientY - rect.top) * scaleY / cell);
+  if (col >= 0 && col < cols && row >= 0 && row < rows) {
+    _hbErasing = spr && spr.hitboxMask && spr.hitboxMask[row * cols + col];
+  }
+  _hbPainting = true;
+  _paintHitboxCell(e);
+}
+function hbCanvasMove(e) { if (_hbPainting) _paintHitboxCell(e); }
+function hbCanvasUp() { _hbPainting = false; }
+
+function applyHitbox() {
+  const spr = sprites[selectedSprite];
+  if (!spr) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  // 1:1 mapping — each grid cell = 1 game px
+  if (spr.hitboxMask && spr.hitboxMask.some(v => v)) {
+    let minC = cols, maxC = 0, minR = rows, maxR = 0;
+    spr.hitboxMask.forEach((v, i) => {
+      if (!v) return;
+      const c2 = i % cols, r2 = Math.floor(i / cols);
+      minC = Math.min(minC, c2); maxC = Math.max(maxC, c2);
+      minR = Math.min(minR, r2); maxR = Math.max(maxR, r2);
+    });
+    spr.hitbox = {
+      rw: cols, rh: rows,
+      ox: minC, oy: minR,
+      w: Math.max(1, maxC - minC + 1),
+      h: Math.max(1, maxR - minR + 1)
+    };
+  } else {
+    spr.hitbox = { rw: cols, rh: rows, ox: 0, oy: 0, w: cols, h: rows };
+  }
+  closeHitboxEditor();
+  buildSpriteSettings();
+}
+
+function clearHitboxMask() {
+  const spr = sprites[selectedSprite];
+  if (spr) spr.hitboxMask = new Array((spr.sprW||16) * (spr.sprH||16)).fill(false);
+  renderHitboxCanvas();
+}
+
+function fillHitboxMask() {
+  const spr = sprites[selectedSprite];
+  if (spr) spr.hitboxMask = new Array((spr.sprW||16) * (spr.sprH||16)).fill(true);
+  renderHitboxCanvas();
+}
+
+function closeHitboxEditor() {
+  document.getElementById('hitboxModal').style.display = 'none';
+}
+
+// ════════════════════════════════════════════════════════
+//  SPRITE PIXEL ART EDITOR
+// ════════════════════════════════════════════════════════
+const PIXEL_COLS = 16, PIXEL_ROWS = 16, PIXEL_CELL = 20;
+const PIXEL_PALETTE = [
+  '#000000','#ffffff','#e53935','#ff7043','#fdd835','#43a047',
+  '#1e88e5','#8e24aa','#f06292','#26c6da','#ffb300','#6d4c41',
+  '#546e7a','#9e9e9e','#bdbdbd','#ef9a9a','#a5d6a7','#90caf9',
+  '#ce93d8','#ffe082','erase'
+];
+let _activePixelColor = '#e53935';
+let _pixelPainting = false;
+
+function buildPixelPalette() {
+  const el = document.getElementById('pixelPalette');
+  el.innerHTML = '';
+  PIXEL_PALETTE.forEach(color => {
+    const btn = document.createElement('button');
+    btn.dataset.color = color;
+    btn.className = 'px-pal-btn';
+    btn.style.cssText = `width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;background:${color === 'erase' ? '#333' : color};font-size:.8rem;display:flex;align-items:center;justify-content:center;`;
+    if (color === 'erase') btn.textContent = '✕';
+    btn.onclick = () => { _activePixelColor = color; refreshPaletteSelection(); };
+    el.appendChild(btn);
+  });
+  refreshPaletteSelection();
+}
+
+function refreshPaletteSelection() {
+  document.querySelectorAll('.px-pal-btn').forEach(btn => {
+    btn.style.borderColor = btn.dataset.color === _activePixelColor ? '#fff' : 'transparent';
+  });
+}
+
+function openSpriteDrawer() {
+  const spr = sprites[selectedSprite];
+  if (!spr || spr.name === 'Spawn') return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  if (!spr.pixels || spr.pixels.length !== cols * rows) spr.pixels = new Array(cols * rows).fill('');
+  // Resize canvas to fit grid
+  const maxPx = 400;
+  const cell = Math.max(4, Math.min(20, Math.floor(maxPx / Math.max(cols, rows))));
+  const c = document.getElementById('pixelCanvas');
+  c.width = cols * cell; c.height = rows * cell;
+  c.style.width = c.width + 'px'; c.style.height = c.height + 'px';
+  buildPixelPalette();
+  document.getElementById('pixelDrawModal').style.display = 'flex';
+  renderPixelCanvas();
+}
+
+function closePixelDrawer() {
+  document.getElementById('pixelDrawModal').style.display = 'none';
+}
+
+function renderPixelCanvas() {
+  const c = document.getElementById('pixelCanvas');
+  const ctx2 = c.getContext('2d');
+  const spr = sprites[selectedSprite]; if (!spr) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  const cell = c.width / cols;
+  ctx2.clearRect(0, 0, c.width, c.height);
+  // Checkerboard
+  for (let r = 0; r < rows; r++) {
+    for (let col = 0; col < cols; col++) {
+      ctx2.fillStyle = (r + col) % 2 === 0 ? '#777' : '#555';
+      ctx2.fillRect(col * cell, r * cell, cell, cell);
+    }
+  }
+  if (spr.pixels) {
+    spr.pixels.forEach((color, i) => {
+      if (!color) return;
+      const col = i % cols, row = Math.floor(i / cols);
+      ctx2.fillStyle = color;
+      ctx2.fillRect(col * cell, row * cell, cell, cell);
+    });
+  }
+  // Grid lines
+  ctx2.strokeStyle = 'rgba(0,0,0,0.25)'; ctx2.lineWidth = 0.5;
+  for (let i = 0; i <= cols; i++) { ctx2.beginPath(); ctx2.moveTo(i*cell,0); ctx2.lineTo(i*cell,c.height); ctx2.stroke(); }
+  for (let j = 0; j <= rows; j++) { ctx2.beginPath(); ctx2.moveTo(0,j*cell); ctx2.lineTo(c.width,j*cell); ctx2.stroke(); }
+}
+
+function _paintCell(e) {
+  const spr = sprites[selectedSprite];
+  if (!spr || !spr.pixels) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  const c = document.getElementById('pixelCanvas');
+  const rect = c.getBoundingClientRect();
+  const scaleX = c.width / rect.width, scaleY = c.height / rect.height;
+  const cell = c.width / cols;
+  const col = Math.floor((e.clientX - rect.left) * scaleX / cell);
+  const row = Math.floor((e.clientY - rect.top) * scaleY / cell);
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return;
+  spr.pixels[row * cols + col] = _activePixelColor === 'erase' ? '' : _activePixelColor;
+  renderPixelCanvas();
+}
+function pixelCanvasDown(e) { _pixelPainting = true; _paintCell(e); }
+function pixelCanvasMove(e) { if (_pixelPainting) _paintCell(e); }
+function pixelCanvasUp() { _pixelPainting = false; }
+
+function clearPixelArt() {
+  const spr = sprites[selectedSprite];
+  if (spr) spr.pixels = new Array((spr.sprW||16) * (spr.sprH||16)).fill('');
+  renderPixelCanvas();
+}
+
+function drawSpritePixels(ctx, pixels, x, y, w, h, cols) {
+  cols = cols || 16;
+  const rows = Math.ceil(pixels.length / cols);
+  const cellW = w / cols, cellH = h / rows;
+  pixels.forEach((color, i) => {
+    if (!color) return;
+    const c2 = i % cols, r2 = Math.floor(i / cols);
+    ctx.fillStyle = color;
+    ctx.fillRect(x + c2 * cellW, y + r2 * cellH, Math.ceil(cellW) + 0.5, Math.ceil(cellH) + 0.5);
+  });
+}
+
+document.getElementById('addSpriteBtn').addEventListener('click',()=>{
+  const colors=['#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa','#00acc1'];
+  sprites.push({name:'Sprite'+(sprites.length+1),x:100+Math.random()*80,y:70+Math.random()*40,color:colors[sprites.length%colors.length],size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,sprW:16,sprH:16,hitbox:{w:16,h:16}});
+  buildSpriteList();
+});
+
+// ════════════════════════════════════════════════════════
+//  TOAST
+// ════════════════════════════════════════════════════════
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// ════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════
+if (currentUser) {
+  showBrowse();
+} else {
+  document.getElementById('authScreen').style.display = 'flex';
+}
+</script>
+<!-- Sprite Pixel Art Editor Modal -->
+<div id="pixelDrawModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);align-items:center;justify-content:center">
+  <div style="background:#252525;border-radius:14px;padding:20px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.7)">
+    <h3 style="color:#eee;margin:0 0 12px;font-size:.95rem">🎨 Draw Sprite</h3>
+    <canvas id="pixelCanvas" width="320" height="320"
+      style="width:320px;height:320px;display:block;margin:0 auto 12px;image-rendering:pixelated;border-radius:6px;cursor:crosshair;touch-action:none;border:2px solid rgba(255,255,255,.1)"
+      onpointerdown="pixelCanvasDown(event)" onpointermove="pixelCanvasMove(event)"
+      onpointerup="pixelCanvasUp()" onpointerleave="pixelCanvasUp()">
+    </canvas>
+    <!-- Palette -->
+    <div id="pixelPalette" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;justify-content:center"></div>
+    <div style="display:flex;gap:8px">
+      <button onclick="clearPixelArt()" style="flex:1;padding:9px;background:#444;border:none;border-radius:7px;color:#ccc;font-weight:700;cursor:pointer;font-size:.85rem">🗑 Clear</button>
+      <button onclick="closePixelDrawer()" style="flex:1;padding:9px;background:#7c4dff;border:none;border-radius:7px;color:#fff;font-weight:700;cursor:pointer;font-size:.9rem">✓ Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hitbox Editor Modal -->
+<div id="hitboxModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);align-items:center;justify-content:center">
+  <div style="background:#252525;border-radius:14px;padding:20px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.7)">
+    <h3 style="color:#eee;margin:0 0 6px;font-size:.95rem">⬜ Draw Hitbox</h3>
+    <p style="color:rgba(255,255,255,.4);font-size:.72rem;margin:0 0 10px">Paint the collision area. Sprite shown as ghost. <b style="color:rgba(255,100,100,.7)">Red = solid</b>. Click painted cell to erase.</p>
+    <canvas id="hitboxCanvas" width="320" height="320"
+      style="width:320px;height:320px;display:block;margin:0 auto 12px;image-rendering:pixelated;border-radius:6px;cursor:crosshair;touch-action:none;border:2px solid rgba(255,255,255,.1)"
+      onpointerdown="hbCanvasDown(event)" onpointermove="hbCanvasMove(event)"
+      onpointerup="hbCanvasUp()" onpointerleave="hbCanvasUp()">
+    </canvas>
+    <div style="display:flex;gap:8px">
+      <button onclick="clearHitboxMask()" style="flex:1;padding:9px;background:#444;border:none;border-radius:7px;color:#ccc;font-weight:700;cursor:pointer;font-size:.8rem">🗑 Clear</button>
+      <button onclick="fillHitboxMask()" style="flex:1;padding:9px;background:#444;border:none;border-radius:7px;color:#ccc;font-weight:700;cursor:pointer;font-size:.8rem">▣ Fill All</button>
+      <button onclick="applyHitbox()" style="flex:2;padding:9px;background:#e53935;border:none;border-radius:7px;color:#fff;font-weight:700;cursor:pointer;font-size:.9rem">✓ Apply</button>
+      <button onclick="closeHitboxEditor()" style="flex:1;padding:9px;background:#333;border:none;border-radius:7px;color:#aaa;font-weight:700;cursor:pointer;font-size:.8rem">✕</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
