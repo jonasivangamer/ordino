@@ -1043,9 +1043,10 @@ function gameLoop(ts) {
       }
     }
   }
-  if (player.x<0) player.x=0;
-  if (player.x+player.w>gameCanvas.width) player.x=gameCanvas.width-player.w;
-  if (player.y>H+100) { player.y=0; player.vy=0; }
+  // Map barriers — left, right, top (bottom is open — you can fall off)
+  if (player.x<0) { player.x=0; player.vx=0; }
+  if (player.x+player.w>gameCanvas.width) { player.x=gameCanvas.width-player.w; player.vx=0; }
+  if (player.y<0) { player.y=0; player.vy=0; }
 
   // Sprite physics + player collision
   for (const s of sprites) {
