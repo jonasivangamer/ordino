@@ -891,7 +891,7 @@ function readGameSettings() {
     multiplayer: document.getElementById('gsMultiplayer').checked,
     maxPlayers: Math.min(30, Math.max(1, parseInt(document.getElementById('gsMaxPlayers').value)||4)),
     speed: parseFloat(document.getElementById('gsSpeedNum').value)||4,
-    gravity: parseFloat(document.getElementById('gsGravNum').value)||0.55,
+    gravity: isNaN(parseFloat(document.getElementById('gsGravNum').value)) ? 0.55 : parseFloat(document.getElementById('gsGravNum').value),
     jumpHeight: parseFloat(document.getElementById('gsJumpNum').value)||13,
     mapType: studioMapType,
     spawnX: sprites[0] ? sprites[0].x : 50,
