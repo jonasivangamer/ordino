@@ -385,10 +385,6 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     <div class="setting-row"><label>🔊 Sound Effects</label><label class="toggle"><input type="checkbox" id="sfxToggle" checked><span class="slider"></span></label></div>
     <div class="setting-row"><label>📊 Show FPS</label><label class="toggle"><input type="checkbox" id="fpsToggle"><span class="slider"></span></label></div>
     <div class="setting-row"><label>🖥️ Quality</label><select class="setting-select" id="qualitySelect"><option>High</option><option>Medium</option><option>Low</option></select></div>
-    <div style="margin:12px 0 6px;font-weight:700;font-size:.85rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em">🏃 Player Settings</div>
-    <div class="setting-row"><label>Speed</label><input type="range" id="igSpeed" min="1" max="12" step="0.5" value="4" style="flex:1;accent-color:#7c4dff" oninput="SPEED=parseFloat(this.value);document.getElementById('igSpeedVal').textContent=this.value"><span id="igSpeedVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">4</span></div>
-    <div class="setting-row"><label>Gravity</label><input type="range" id="igGrav" min="0" max="2" step="0.05" value="0.55" style="flex:1;accent-color:#7c4dff" oninput="GRAVITY=parseFloat(this.value);document.getElementById('igGravVal').textContent=this.value"><span id="igGravVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">0.55</span></div>
-    <div class="setting-row"><label>Jump Height</label><input type="range" id="igJump" min="4" max="24" step="0.5" value="13" style="flex:1;accent-color:#7c4dff" oninput="JUMP_FORCE=parseFloat(this.value);document.getElementById('igJumpVal').textContent=this.value"><span id="igJumpVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">13</span></div>
     <button class="modal-btn studio-btn" id="openStudioBtn">🛠️ Open Ordino Studio</button>
     <button class="modal-btn close-btn" id="closeSettingsBtn">✕ Close</button>
   </div>
@@ -1746,16 +1742,7 @@ document.getElementById('mobileControls').addEventListener('touchcancel', () => 
 // ════════════════════════════════════════════════════════
 //  GAME SETTINGS MODAL
 // ════════════════════════════════════════════════════════
-document.getElementById('settingsBtn').addEventListener('click', () => {
-  // Sync in-game player settings sliders with current values
-  document.getElementById('igSpeed').value = SPEED;
-  document.getElementById('igSpeedVal').textContent = SPEED;
-  document.getElementById('igGrav').value = GRAVITY;
-  document.getElementById('igGravVal').textContent = GRAVITY;
-  document.getElementById('igJump').value = JUMP_FORCE;
-  document.getElementById('igJumpVal').textContent = JUMP_FORCE;
-  document.getElementById('settingsModal').classList.add('open');
-});
+document.getElementById('settingsBtn').addEventListener('click', () => document.getElementById('settingsModal').classList.add('open'));
 document.getElementById('settingsModal').addEventListener('click', e => { if(e.target===document.getElementById('settingsModal')) document.getElementById('settingsModal').classList.remove('open'); });
 document.getElementById('closeSettingsBtn').addEventListener('click', () => document.getElementById('settingsModal').classList.remove('open'));
 document.getElementById('fpsToggle').addEventListener('change', e => { showFPS=e.target.checked; });
