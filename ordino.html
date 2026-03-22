@@ -720,6 +720,7 @@ function playCloudGame(idx) {
   currentGameIdx = -1;
   loadGameSettings(g);
   if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
+  gameBlocks = g.blocks ? JSON.parse(JSON.stringify(g.blocks)) : [];
   document.getElementById('browseScreen').style.display = 'none';
   document.getElementById('settingsBtn').style.display = 'block';
   document.getElementById('backToBrowseBtn').style.display = 'block';
@@ -815,12 +816,15 @@ function cloudLoadGames() {
 
 let currentGameIdx = -1;
 
+let gameBlocks = []; // blocks data for current game (used at runtime)
+
 function playGame(idx) {
   const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
   const g = games[idx];
   currentGameIdx = idx;
   loadGameSettings(g);
   if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
+  gameBlocks = g.blocks ? JSON.parse(JSON.stringify(g.blocks)) : [];
   document.getElementById('browseScreen').style.display = 'none';
   document.getElementById('settingsBtn').style.display = 'block';
   document.getElementById('backToBrowseBtn').style.display = 'block';
@@ -1133,6 +1137,33 @@ function gameLoop(ts) {
           else if (oL > 0 && oL < oR) player.x = sx + sw;
         }
       }
+    }
+  }
+
+  // ── Interact blocks: check if player touches sprites ──
+  for (let si = 0; si < sprites.length; si++) {
+    const s = sprites[si];
+    if (!s.visible || s.isSpawn || !s._x) continue;
+    const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
+    const oxx = s.hitbox.ox || 0, oyy = s.hitbox.oy || 0;
+    const sl = s._x - rw/2 + oxx, st = s._y - rh + oyy;
+    const touching = player.x + player.w > sl && player.x < sl + s.hitbox.w &&
+                     player.y + player.h > st && player.y < st + s.hitbox.h;
+    if (!touching) continue;
+    // Find interact blocks assigned to this sprite
+    const sprBlocks = gameBlocks.filter(b => b.spriteIdx === si || b.spriteName === s.name);
+    // Also check unassigned blocks (global)
+    const allInteract = gameBlocks.filter(b => b.id === 'touch_set_player' || b.id === 'touch_trigger');
+    const blocksToRun = sprBlocks.length > 0 ? sprBlocks : allInteract;
+    for (const b of blocksToRun) {
+      if (b.id === 'touch_set_player') {
+        const prop = b.vals && b.vals.prop || 'speed';
+        const val = parseFloat((b.vals && b.vals.val) || 0);
+        if (prop === 'speed') SPEED = val;
+        else if (prop === 'gravity') GRAVITY = val;
+        else if (prop === 'jumpHeight') JUMP_FORCE = val;
+      }
+      // touch_trigger can chain with other blocks below it — future expansion
     }
   }
 
@@ -1903,6 +1934,10 @@ const categories = [
     {id:'play_sound',label:'🔊 Play sound',inputs:[{type:'select',opts:['pop','boing','boom'],name:'sound'}]},
     {id:'set_volume',label:'🔉 Set volume to',inputs:[{type:'number',val:100,name:'vol'}],suffix:'%'},
   ]},
+  {name:'Interact',color:'#00bcd4',blocks:[
+    {id:'touch_set_player',label:'👆 If touched, set player',inputs:[{type:'select',opts:['speed','gravity','jumpHeight'],name:'prop'}],mid:'to',inputs2:[{type:'number',val:4,name:'val'}]},
+    {id:'touch_trigger',label:'👆 If touched'},
+  ]},
 ];
 
 let currentCat=0;
@@ -2201,10 +2236,12 @@ function updateHint(){
 
 // Save/restore
 function getScriptBlocksData(){
+  const spr = sprites[selectedSprite];
   return allScriptBlocks().map(el=>{
     const vals={};
     el.querySelectorAll('[data-name]').forEach(inp=>{vals[inp.dataset.name]=inp.value;});
-    return {id:el.dataset.blockId,uid:el.dataset.uid,snapParent:el.dataset.snapParent||'',x:parseInt(el.style.left)||0,y:parseInt(el.style.top)||0,color:el.style.background,vals};
+    return {id:el.dataset.blockId,uid:el.dataset.uid,snapParent:el.dataset.snapParent||'',x:parseInt(el.style.left)||0,y:parseInt(el.style.top)||0,color:el.style.background,vals,
+      spriteIdx: selectedSprite, spriteName: spr ? spr.name : ''};
   });
 }
 
@@ -2271,6 +2308,8 @@ async function executeBlocks() {
       case 'forever': while(isRunning){spr.x+=2;if(spr.x>W)spr.x=0;await sleep(50);} break;
       case 'stop': isRunning=false; break;
       case 'play_sound': if(p.sound==='boing')playBoing();else if(p.sound==='boom')playBoom();else playTone(600,0.12,'sine'); break;
+      case 'touch_set_player': showToast('👆 Interact: sets player ' + (p.prop||'speed') + ' to ' + (p.val||0) + ' when touched in game'); break;
+      case 'touch_trigger': showToast('👆 Interact: triggers when player touches this sprite in game'); break;
     }
     if(id!=='wait'&&id!=='repeat'&&id!=='forever') await sleep(80);
   }
