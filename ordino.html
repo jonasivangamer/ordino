@@ -726,13 +726,7 @@ function playCloudGame(idx) {
   document.getElementById('backToBrowseBtn').style.display = 'block';
   showMobileControls();
   showChat();
-  if (g.multiplayer) {
-    mpShowOverlay();
-  } else {
-    initWorld();
-    lastTime = performance.now();
-    gameAF = requestAnimationFrame(gameLoop);
-  }
+  mpShowOverlay();
 }
 
 function deleteGame(idx) {
@@ -830,13 +824,7 @@ function playGame(idx) {
   document.getElementById('backToBrowseBtn').style.display = 'block';
   showMobileControls();
   showChat();
-  if (g.multiplayer) {
-    mpShowOverlay();
-  } else {
-    initWorld();
-    lastTime = performance.now();
-    gameAF = requestAnimationFrame(gameLoop);
-  }
+  mpShowOverlay();
 }
 
 function backToBrowse() {
