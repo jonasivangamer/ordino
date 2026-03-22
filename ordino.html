@@ -461,22 +461,26 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
           <input class="gs-num" id="gsMaxPlayers" type="number" min="1" max="30" value="4">
         </div>
 
-        <span class="gs-label">Player Speed</span>
-        <div class="gs-slider-row">
-          <input class="gs-slider" type="range" id="gsSpeedSlider" min="1" max="12" step="0.5" value="4" oninput="syncGS('speed')">
-          <input class="gs-num" id="gsSpeedNum" type="number" min="1" max="12" step="0.5" value="4" oninput="syncGS('speedNum')">
-        </div>
+        <div style="margin:14px 0 8px;padding:8px 10px;background:rgba(124,77,255,.12);border:1px solid rgba(124,77,255,.25);border-radius:8px">
+          <span style="font-weight:700;font-size:.85rem;color:#b388ff;display:block;margin-bottom:8px">🏃 Player Settings</span>
 
-        <span class="gs-label">Gravity</span>
-        <div class="gs-slider-row">
-          <input class="gs-slider" type="range" id="gsGravSlider" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('grav')">
-          <input class="gs-num" id="gsGravNum" type="number" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('gravNum')">
-        </div>
+          <span class="gs-label" style="margin-top:0">Speed</span>
+          <div class="gs-slider-row">
+            <input class="gs-slider" type="range" id="gsSpeedSlider" min="1" max="12" step="0.5" value="4" oninput="syncGS('speed')">
+            <input class="gs-num" id="gsSpeedNum" type="number" min="1" max="12" step="0.5" value="4" oninput="syncGS('speedNum')">
+          </div>
 
-        <span class="gs-label">Jump Height</span>
-        <div class="gs-slider-row">
-          <input class="gs-slider" type="range" id="gsJumpSlider" min="4" max="24" step="0.5" value="13" oninput="syncGS('jump')">
-          <input class="gs-num" id="gsJumpNum" type="number" min="4" max="24" step="0.5" value="13" oninput="syncGS('jumpNum')">
+          <span class="gs-label">Gravity</span>
+          <div class="gs-slider-row">
+            <input class="gs-slider" type="range" id="gsGravSlider" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('grav')">
+            <input class="gs-num" id="gsGravNum" type="number" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('gravNum')">
+          </div>
+
+          <span class="gs-label">Jump Height</span>
+          <div class="gs-slider-row">
+            <input class="gs-slider" type="range" id="gsJumpSlider" min="4" max="24" step="0.5" value="13" oninput="syncGS('jump')">
+            <input class="gs-num" id="gsJumpNum" type="number" min="4" max="24" step="0.5" value="13" oninput="syncGS('jumpNum')">
+          </div>
         </div>
 
         <span class="gs-label">Background</span>
