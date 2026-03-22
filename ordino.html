@@ -2166,18 +2166,32 @@ function dropBlock(blockDef,color,x,y,savedVals,uid,snapParent){
   el.dataset.snapParent=snapParent||'';
   if(snapParent) el.classList.add('snap-child');
   el.innerHTML=buildBlockHTML(blockDef,false);
+  // Delete button on every block
+  const delBtn=document.createElement('span');
+  delBtn.textContent='✕';
+  delBtn.style.cssText='position:absolute;top:3px;right:5px;cursor:pointer;font-size:12px;color:rgba(255,255,255,.45);font-weight:700;line-height:1;padding:2px 5px;border-radius:4px;z-index:20';
+  delBtn.title='Delete block';
+  delBtn.onmouseenter=()=>{delBtn.style.color='#ff4444';delBtn.style.background='rgba(0,0,0,.3)';};
+  delBtn.onmouseleave=()=>{delBtn.style.color='rgba(255,255,255,.45)';delBtn.style.background='none';};
+  function removeBlock(){
+    const u=el.dataset.uid;
+    allScriptBlocks().forEach(b=>{if(b.dataset.snapParent===u){b.dataset.snapParent='';b.classList.remove('snap-child');}});
+    el.remove(); updateHint();
+  }
+  delBtn.addEventListener('mousedown',e=>e.stopPropagation());
+  delBtn.addEventListener('click',e=>{e.stopPropagation();removeBlock();});
+  delBtn.addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();removeBlock();});
+  el.style.paddingRight='24px';
+  el.appendChild(delBtn);
   if(savedVals){
     el.querySelectorAll('[data-name]').forEach(inp=>{
       if(savedVals[inp.dataset.name]!==undefined) inp.value=savedVals[inp.dataset.name];
     });
   }
-  el.addEventListener('mousedown',e=>{if(e.button!==0||e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;startBlockDrag(e,el);});
+  el.addEventListener('mousedown',e=>{if(e.button!==0||e.target.tagName==='INPUT'||e.target.tagName==='SELECT'||e.target===delBtn)return;startBlockDrag(e,el);});
   el.addEventListener('contextmenu',e=>{
     e.preventDefault();
-    // Detach children: give them no parent (they float free)
-    const uid=el.dataset.uid;
-    allScriptBlocks().forEach(b=>{if(b.dataset.snapParent===uid){b.dataset.snapParent='';b.classList.remove('snap-child');}});
-    el.remove(); updateHint();
+    removeBlock();
   });
   sa.appendChild(el); updateHint();
   // Try snapping after render (need offsetHeight)
