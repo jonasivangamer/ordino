@@ -1023,6 +1023,221 @@ function initWorld() {
     s._vy = 0;
     s._vx = 0;
   }
+  // Init runtime block state per sprite
+  initGameBlockState();
+}
+
+// ════════════════════════════════════════════════════════
+//  GAME BLOCK RUNTIME — executes blocks during gameplay
+// ════════════════════════════════════════════════════════
+let gbState = {}; // per-sprite runtime: { spriteIdx: { chains, timers, forever, repeatCounters } }
+
+function initGameBlockState() {
+  gbState = {};
+  if (!gameBlocks || gameBlocks.length === 0) return;
+  // Group blocks by sprite
+  const bySprite = {};
+  gameBlocks.forEach(b => {
+    const idx = b.spriteIdx ?? 0;
+    if (!bySprite[idx]) bySprite[idx] = [];
+    bySprite[idx].push(b);
+  });
+  // Build chains per sprite
+  for (const idx in bySprite) {
+    const blocks = bySprite[idx];
+    // Build UID map
+    const byUid = {};
+    blocks.forEach(b => { byUid[b.uid] = b; });
+    // Find roots (no snapParent or parent not found)
+    const roots = blocks.filter(b => !b.snapParent || !byUid[b.snapParent]);
+    // Build chains: root → children in order
+    const chains = roots.map(root => {
+      const chain = [root];
+      let cur = root;
+      while (true) {
+        const child = blocks.find(b => b.snapParent === cur.uid);
+        if (!child) break;
+        chain.push(child);
+        cur = child;
+      }
+      return chain;
+    });
+    gbState[idx] = {
+      chains,
+      // Per-chain execution state
+      chainState: chains.map(() => ({
+        pc: 0, // program counter (current block in chain)
+        waitUntil: 0, // timestamp to wait until
+        repeatCount: 0, // current repeat iteration
+        repeatTarget: 0, // total repeat iterations
+        repeatPC: 0, // block to repeat from
+        active: false, // whether chain is running
+        triggered: false, // whether event was triggered this frame
+      })),
+    };
+  }
+}
+
+function runGameBlocks(dt) {
+  if (!gameBlocks || gameBlocks.length === 0) return;
+  const W = gameCanvas.width, H = gameCanvas.height;
+  const sx = W / 276, sy = H / 180;
+  const now = performance.now();
+
+  for (const idx in gbState) {
+    const si = parseInt(idx);
+    const s = sprites[si];
+    if (!s || !s.visible) continue;
+
+    // Check if player is touching this sprite
+    let touching = false;
+    if (s._x && !s.isSpawn) {
+      const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
+      const oxx = s.hitbox.ox || 0, oyy = s.hitbox.oy || 0;
+      const sl = s._x - rw/2 + oxx, st = s._y - rh + oyy;
+      touching = player.x + player.w > sl && player.x < sl + s.hitbox.w &&
+                 player.y + player.h > st && player.y < st + s.hitbox.h;
+    }
+
+    const { chains, chainState } = gbState[idx];
+    for (let ci = 0; ci < chains.length; ci++) {
+      const chain = chains[ci];
+      const cs = chainState[ci];
+      if (chain.length === 0) continue;
+      const head = chain[0];
+
+      // Check event triggers
+      if (!cs.active) {
+        let shouldStart = false;
+        if (head.id === 'flag') shouldStart = true; // flag = always running
+        if (head.id === 'key_press') {
+          const k = head.vals && head.vals.key || 'Space';
+          if (keys[k]) shouldStart = true;
+        }
+        if (head.id === 'touch_trigger') shouldStart = touching;
+        if (head.id === 'touch_set_player') shouldStart = touching;
+
+        if (shouldStart) {
+          cs.active = true;
+          cs.pc = (head.id === 'flag' || head.id === 'key_press' || head.id === 'touch_trigger') ? 1 : 0;
+          cs.waitUntil = 0;
+          cs.repeatCount = 0;
+        }
+      }
+
+      if (!cs.active) continue;
+
+      // Wait check
+      if (cs.waitUntil > 0) {
+        if (now < cs.waitUntil) continue;
+        cs.waitUntil = 0;
+        cs.pc++;
+      }
+
+      // Execute blocks in chain
+      let steps = 0;
+      while (cs.pc < chain.length && steps < 5) {
+        steps++;
+        const b = chain[cs.pc];
+        const v = b.vals || {};
+        const val = (name, def) => { const r = parseFloat(v[name]); return isNaN(r) ? def : r; };
+
+        switch (b.id) {
+          // Motion
+          case 'move_x': s._x += val('steps', 10); cs.pc++; break;
+          case 'move_y': s._y += val('steps', 10); cs.pc++; break;
+          case 'set_x': s._x = val('x', 0) * sx + W/2; cs.pc++; break;
+          case 'set_y': s._y = val('y', 0) * sy + H/2; cs.pc++; break;
+          case 'goto_xy': s._x = val('x', 0) * sx + W/2; s._y = val('y', 0) * sy + H/2; cs.pc++; break;
+          case 'bounce':
+            if (s._x < 0) s._x = 0;
+            if (s._x > W) s._x = W;
+            if (s._y < 0) s._y = 0;
+            if (s._y > H) s._y = H;
+            cs.pc++; break;
+
+          // Looks
+          case 'say': s.saying = v.msg || 'Hello!'; cs.pc++; break;
+          case 'set_size': { const sz = val('size', 100) / 100; s.sprW = Math.round((s.sprW || 16) * sz); s.sprH = Math.round((s.sprH || 16) * sz); cs.pc++; break; }
+          case 'change_color': s.color = v.color || '#ff4444'; cs.pc++; break;
+          case 'show': s.visible = true; cs.pc++; break;
+          case 'hide': s.visible = false; cs.pc++; break;
+
+          // Control
+          case 'wait':
+            cs.waitUntil = now + (val('secs', 1) * 1000);
+            break; // Don't increment pc — wait handler does it
+          case 'repeat':
+            if (cs.repeatCount === 0) {
+              cs.repeatTarget = val('times', 10);
+              cs.repeatPC = cs.pc + 1; // next block to repeat
+            }
+            cs.repeatCount++;
+            if (cs.repeatCount > cs.repeatTarget) {
+              cs.repeatCount = 0;
+              // Skip to end of chain (repeat runs remaining blocks N times)
+              cs.pc = chain.length;
+            } else {
+              cs.pc++;
+            }
+            break;
+          case 'forever':
+            cs.pc = 1; // Loop back to first block after event
+            break;
+          case 'if_edge':
+            if (s._x <= 0 || s._x >= W || s._y <= 0 || s._y >= H) {
+              cs.pc++; // continue to next block
+            } else {
+              cs.pc = chain.length; // skip rest
+            }
+            break;
+          case 'stop':
+            cs.active = false;
+            cs.pc = 0;
+            break;
+
+          // Sound
+          case 'play_sound':
+            if (v.sound === 'boing') playBoing();
+            else if (v.sound === 'boom') playBoom();
+            else playTone(600, 0.12, 'sine');
+            cs.pc++; break;
+
+          // Interact
+          case 'touch_set_player':
+            if (touching) {
+              const prop = v.prop || 'speed';
+              const pval = val('val', 0);
+              if (prop === 'speed') SPEED = pval;
+              else if (prop === 'gravity') GRAVITY = pval;
+              else if (prop === 'jumpHeight') JUMP_FORCE = pval;
+            }
+            cs.pc++; break;
+          case 'touch_trigger':
+            cs.pc++; break;
+
+          // Events (skip, already handled as triggers)
+          case 'flag': cs.pc++; break;
+          case 'key_press': cs.pc++; break;
+
+          default: cs.pc++; break;
+        }
+      }
+
+      // Chain finished — reset for re-triggering
+      if (cs.pc >= chain.length) {
+        // Forever blocks and flag events restart automatically
+        if (chain.some(b => b.id === 'forever')) {
+          cs.pc = 1;
+        } else if (head.id === 'flag') {
+          cs.pc = 1; // flag clicked = runs forever
+        } else {
+          cs.active = false;
+          cs.pc = 0;
+        }
+      }
+    }
+  }
 }
 
 function gameLoop(ts) {
@@ -1140,32 +1355,8 @@ function gameLoop(ts) {
     }
   }
 
-  // ── Interact blocks: check if player touches sprites ──
-  for (let si = 0; si < sprites.length; si++) {
-    const s = sprites[si];
-    if (!s.visible || s.isSpawn || !s._x) continue;
-    const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
-    const oxx = s.hitbox.ox || 0, oyy = s.hitbox.oy || 0;
-    const sl = s._x - rw/2 + oxx, st = s._y - rh + oyy;
-    const touching = player.x + player.w > sl && player.x < sl + s.hitbox.w &&
-                     player.y + player.h > st && player.y < st + s.hitbox.h;
-    if (!touching) continue;
-    // Find interact blocks assigned to this sprite
-    const sprBlocks = gameBlocks.filter(b => b.spriteIdx === si || b.spriteName === s.name);
-    // Also check unassigned blocks (global)
-    const allInteract = gameBlocks.filter(b => b.id === 'touch_set_player' || b.id === 'touch_trigger');
-    const blocksToRun = sprBlocks.length > 0 ? sprBlocks : allInteract;
-    for (const b of blocksToRun) {
-      if (b.id === 'touch_set_player') {
-        const prop = b.vals && b.vals.prop || 'speed';
-        const val = parseFloat((b.vals && b.vals.val) || 0);
-        if (prop === 'speed') SPEED = val;
-        else if (prop === 'gravity') GRAVITY = val;
-        else if (prop === 'jumpHeight') JUMP_FORCE = val;
-      }
-      // touch_trigger can chain with other blocks below it — future expansion
-    }
-  }
+  // ── Run game blocks for all sprites ──
+  runGameBlocks(dt);
 
   if (player.vx!==0&&player.onGround) { player.frameT+=dt; if(player.frameT>100){player.frame=(player.frame+1)%4;player.frameT=0;} }
   else { player.frame=0; }
@@ -1305,6 +1496,20 @@ function drawGame() {
       ctx.fillRect(rx, ry, rw, rh);
       ctx.strokeStyle = '#757575'; ctx.lineWidth = 1.5;
       ctx.strokeRect(rx, ry, rw, rh);
+    }
+    // Speech bubble for "say" block
+    if (s.saying) {
+      ctx.save();
+      ctx.font = 'bold 11px Segoe UI,sans-serif';
+      const tw = ctx.measureText(s.saying).width;
+      const bw = Math.max(tw + 14, 30), bh = 20;
+      const bx = rx + rw/2 - bw/2, by = ry - 28;
+      ctx.fillStyle = 'rgba(255,255,255,0.93)';
+      ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 6); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(rx+rw/2-4, by+bh); ctx.lineTo(rx+rw/2+4, by+bh); ctx.lineTo(rx+rw/2, by+bh+5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#222';
+      ctx.fillText(s.saying, bx + 7, by + 15);
+      ctx.restore();
     }
   }
 
@@ -1946,6 +2151,7 @@ let sprites=[
   {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true},
 ];
 let selectedSprite=0;
+let spriteBlocksMap = {}; // { spriteIndex: [blockData, ...] }
 let isRunning=false;
 let studioAF;
 
@@ -1956,6 +2162,7 @@ function resetStudioForNewGame() {
   ];
   studioMapType='ground';
   selectedSprite=0;
+  spriteBlocksMap = {};
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e=>e.remove());
   updateHint();
   // Reset game settings
@@ -1981,9 +2188,19 @@ function resetStudioForNewGame() {
 function loadStudioFromGame(g) {
   if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
   if (g.mapType) studioMapType = g.mapType;
-  selectedSprite=0;
-  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e=>e.remove());
-  if (g.blocks) restoreScriptBlocks(g.blocks);
+  selectedSprite = 0;
+  spriteBlocksMap = {};
+  // Rebuild per-sprite blocks map from flat array
+  if (g.blocks) {
+    g.blocks.forEach(b => {
+      const idx = b.spriteIdx ?? 0;
+      if (!spriteBlocksMap[idx]) spriteBlocksMap[idx] = [];
+      spriteBlocksMap[idx].push(b);
+    });
+  }
+  // Load selected sprite's blocks into script area
+  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
+  if (spriteBlocksMap[0]) restoreScriptBlocks(spriteBlocksMap[0]);
   updateHint();
 }
 
@@ -2249,14 +2466,36 @@ function updateHint(){
 }
 
 // Save/restore
-function getScriptBlocksData(){
-  const spr = sprites[selectedSprite];
-  return allScriptBlocks().map(el=>{
-    const vals={};
-    el.querySelectorAll('[data-name]').forEach(inp=>{vals[inp.dataset.name]=inp.value;});
-    return {id:el.dataset.blockId,uid:el.dataset.uid,snapParent:el.dataset.snapParent||'',x:parseInt(el.style.left)||0,y:parseInt(el.style.top)||0,color:el.style.background,vals,
-      spriteIdx: selectedSprite, spriteName: spr ? spr.name : ''};
+// Save current script area blocks to spriteBlocksMap for selected sprite
+function saveSpriteBlocks() {
+  spriteBlocksMap[selectedSprite] = allScriptBlocks().map(el => {
+    const vals = {};
+    el.querySelectorAll('[data-name]').forEach(inp => { vals[inp.dataset.name] = inp.value; });
+    return { id: el.dataset.blockId, uid: el.dataset.uid, snapParent: el.dataset.snapParent || '',
+      x: parseInt(el.style.left) || 0, y: parseInt(el.style.top) || 0, color: el.style.background, vals };
   });
+}
+
+// Load blocks from spriteBlocksMap into script area for selected sprite
+function loadSpriteBlocks() {
+  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
+  const saved = spriteBlocksMap[selectedSprite];
+  if (saved && saved.length > 0) restoreScriptBlocks(saved);
+  updateHint();
+}
+
+// Collect ALL sprites' blocks for publishing
+function getScriptBlocksData() {
+  saveSpriteBlocks(); // save current sprite first
+  const all = [];
+  for (const idx in spriteBlocksMap) {
+    const spr = sprites[idx];
+    if (!spr) continue;
+    (spriteBlocksMap[idx] || []).forEach(b => {
+      all.push({ ...b, spriteIdx: parseInt(idx), spriteName: spr.name });
+    });
+  }
+  return all;
 }
 
 function restoreScriptBlocks(blocks){
@@ -2476,7 +2715,7 @@ function buildSpriteList() {
     const div=document.createElement('div');
     div.className='sprite-item'+(i===selectedSprite?' selected':'');
     div.innerHTML=`<div class="sprite-swatch" style="background:${s.color}"></div><div class="sprite-info"><div class="sprite-name">${s.name}</div><div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div></div>`;
-    div.onclick=()=>{selectedSprite=i;buildSpriteList();};
+    div.onclick=()=>{saveSpriteBlocks();selectedSprite=i;loadSpriteBlocks();buildSpriteList();};
     el.appendChild(div);
   });
   buildSpriteSettings();
