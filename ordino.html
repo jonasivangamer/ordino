@@ -1021,9 +1021,17 @@ function gameLoop(ts) {
   const right   = !chatTyping && (keys['KeyD']||keys['ArrowRight']);
   player.vx = right ? SPEED : left ? -SPEED : 0;
   if (player.vx!==0) player.dir = player.vx>0?1:-1;
-  if (jumping && player.onGround) { player.vy = -JUMP_FORCE; player.onGround=false; if(sfxOn) playTone(300,0.05,'square'); }
-
-  player.vy += GRAVITY;
+  if (GRAVITY === 0) {
+    // Zero-G: fly freely with jump/up to go up, no gravity pulls you down
+    const down = !chatTyping && (keys['KeyS']||keys['ArrowDown']);
+    if (jumping) player.vy = -SPEED;
+    else if (down) player.vy = SPEED;
+    else player.vy = 0;
+    player.onGround = false;
+  } else {
+    if (jumping && player.onGround) { player.vy = -JUMP_FORCE; player.onGround=false; if(sfxOn) playTone(300,0.05,'square'); }
+    player.vy += GRAVITY;
+  }
   player.x += player.vx; player.y += player.vy;
   player.onGround = false;
 
