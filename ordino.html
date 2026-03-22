@@ -650,7 +650,7 @@ function renderGamesGrid() {
   }
 
   // Community Games section (from cloud)
-  const communityGames = cloudGames.filter(cg => cg.author !== currentUser);
+  const communityGames = cloudGames.filter(cg => cg.author !== currentUser && cg.visibility === 'public');
   if (communityGames.length > 0) {
     const sec2 = document.createElement('div');
     sec2.innerHTML = '<div class="browse-section-title" style="margin:18px 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">🌍 Community Games</div>';
@@ -664,8 +664,8 @@ function renderGamesGrid() {
     grid.innerHTML = '<div class="browse-empty">No games yet! Click <strong>+ Create Game</strong> to make the first one.</div>';
   }
 
-  // Also show other users' local games (same browser)
-  const otherLocal = localGames.filter(g => g.author !== currentUser);
+  // Also show other users' local games (same browser) — only public ones
+  const otherLocal = localGames.filter(g => g.author !== currentUser && g.visibility === 'public');
   if (otherLocal.length > 0) {
     const sec3 = document.createElement('div');
     sec3.innerHTML = '<div class="browse-section-title" style="margin:18px 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">👤 Other Local Games</div>';
@@ -715,7 +715,7 @@ function makeGameCard(g, idx, source) {
 }
 
 function playCloudGame(idx) {
-  const g = cloudGames.filter(cg => cg.author !== currentUser)[idx];
+  const g = cloudGames.filter(cg => cg.author !== currentUser && cg.visibility === 'public')[idx];
   if (!g) return;
   currentGameIdx = -1;
   loadGameSettings(g);
