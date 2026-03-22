@@ -861,7 +861,7 @@ let SPEED = 4, GRAVITY = 0.55, JUMP_FORCE = 13;
 
 function loadGameSettings(g) {
   SPEED = g.speed || 4;
-  GRAVITY = g.gravity || 0.55;
+  GRAVITY = g.gravity ?? 0.55;
   JUMP_FORCE = g.jumpHeight || 13;
   studioMapType = g.mapType || 'ground';
   gameSpawnX = g.spawnX || 50;
@@ -2402,9 +2402,9 @@ function buildSpriteSettings() {
     </div>
     <div class="spr-setting-row">
       <span class="spr-setting-label">Width</span>
-      <input type="number" min="4" max="800" value="${spr.sprW||16}" onchange="resizeSprite(+this.value, ${spr.sprH||16})" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <input type="number" min="4" max="2000" value="${spr.sprW||16}" onchange="resizeSprite(+this.value, ${spr.sprH||16})" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
       <span class="spr-setting-label" style="margin-left:8px">Height</span>
-      <input type="number" min="4" max="300" value="${spr.sprH||16}" onchange="resizeSprite(${spr.sprW||16}, +this.value)" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <input type="number" min="4" max="2000" value="${spr.sprH||16}" onchange="resizeSprite(${spr.sprW||16}, +this.value)" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
       <span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:6px">px</span>
     </div>
     <button class="spr-hitbox-btn" onclick="openHitboxEditor()">⬜ Edit Hitbox</button>
@@ -2455,8 +2455,8 @@ function deleteSprite() {
 function resizeSprite(newW, newH) {
   const spr = sprites[selectedSprite];
   if (!spr) return;
-  newW = Math.max(4, Math.min(800, Math.round(newW)));
-  newH = Math.max(4, Math.min(300, Math.round(newH)));
+  newW = Math.max(4, Math.min(2000, Math.round(newW)));
+  newH = Math.max(4, Math.min(2000, Math.round(newH)));
   const oldW = spr.sprW || 16, oldH = spr.sprH || 16;
   // Resize pixels array — preserve existing art
   if (spr.pixels) {
