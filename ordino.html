@@ -979,7 +979,7 @@ function resize() { gameCanvas.width = mapW; gameCanvas.height = mapH; }
 window.addEventListener('resize', resize);
 resize();
 
-const player = {x:180,y:0,vx:0,vy:0,w:24,h:36,onGround:false,dir:1,frame:0,frameT:0,bubble:null};
+const player = {x:180,y:0,vx:0,vy:0,w:24,h:36,onGround:false,dir:1,frame:0,frameT:0,bubble:null,hp:100,maxHp:100,dead:false,deathTimer:0};
 const keys = {};
 document.addEventListener('keydown', e => { keys[e.code] = true; });
 document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -1000,6 +1000,7 @@ function initWorld() {
   const spawnY = spawnSpr.y * (H / 180) - player.h;
   player.x = Math.max(0, Math.min(W - player.w, spawnX));
   player.y = spawnY; player.vx = 0; player.vy = 0;
+  player.hp = 100; player.maxHp = 100; player.dead = false; player.deathTimer = 0;
   // Init runtime positions for all sprites
   for (const s of sprites) {
     s._x = s.x * (W / 276);
@@ -1043,10 +1044,30 @@ function gameLoop(ts) {
       }
     }
   }
-  // Map barriers — left, right, top (bottom is open — you can fall off)
+  // Map barriers — left, right, top (bottom = death)
   if (player.x<0) { player.x=0; player.vx=0; }
   if (player.x+player.w>gameCanvas.width) { player.x=gameCanvas.width-player.w; player.vx=0; }
   if (player.y<0) { player.y=0; player.vy=0; }
+  // Fell off bottom → die
+  if (player.y > H + 50 && !player.dead) {
+    player.hp = 0; player.dead = true; player.deathTimer = 120;
+    if(sfxOn) playBoom();
+  }
+  // Death/respawn handling
+  if (player.dead) {
+    player.deathTimer--;
+    if (player.deathTimer <= 0) {
+      // Respawn at spawn point
+      const spSpr = sprites.find(s => s.isSpawn) || {x:50, y:128};
+      player.x = spSpr.x * (gameCanvas.width / 276);
+      player.y = spSpr.y * (gameCanvas.height / 180) - player.h;
+      player.vx = 0; player.vy = 0;
+      player.hp = player.maxHp; player.dead = false;
+    }
+    drawGame();
+    gameAF = requestAnimationFrame(gameLoop);
+    return; // Skip physics while dead
+  }
 
   // Sprite physics + player collision
   for (const s of sprites) {
@@ -1246,8 +1267,36 @@ function drawGame() {
     }
   }
 
-  drawPlayer(player.x,player.y,player.dir,player.frame,player.onGround);
+  if (!player.dead) {
+    drawPlayer(player.x,player.y,player.dir,player.frame,player.onGround);
+  }
   drawRemotePlayers();
+
+  // Health bar (top-left)
+  const hbW = 120, hbH = 12, hbX = 14, hbY = 14;
+  const hpPct = Math.max(0, player.hp / player.maxHp);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.beginPath(); ctx.roundRect(hbX - 2, hbY - 2, hbW + 4, hbH + 4, 5); ctx.fill();
+  ctx.fillStyle = '#333';
+  ctx.fillRect(hbX, hbY, hbW, hbH);
+  const hpColor = hpPct > 0.5 ? '#4caf50' : hpPct > 0.25 ? '#ff9800' : '#f44336';
+  ctx.fillStyle = hpColor;
+  ctx.beginPath(); ctx.roundRect(hbX, hbY, hbW * hpPct, hbH, 3); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 9px Segoe UI,sans-serif';
+  ctx.fillText('❤ ' + Math.ceil(player.hp) + '/' + player.maxHp, hbX + 4, hbY + 9);
+
+  // Death screen overlay
+  if (player.dead) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(139,0,0,0.5)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 28px Segoe UI,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('YOU DIED', W/2, H/2 - 10);
+    ctx.font = '14px Segoe UI,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.fillText('Respawning…', W/2, H/2 + 18);
+    ctx.textAlign = 'left';
+    ctx.restore();
+  }
 
   if (hintAlpha>0) {
     ctx.save(); ctx.globalAlpha=Math.min(1,hintAlpha);
