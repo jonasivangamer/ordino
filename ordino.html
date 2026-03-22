@@ -1086,6 +1086,8 @@ function initGameBlockState() {
 
 function runGameBlocks(dt) {
   if (!gameBlocks || gameBlocks.length === 0) return;
+  // In multiplayer, only the host runs block scripts — clients receive synced state
+  if (mpActive && !mpIsHost) return;
   const W = gameCanvas.width, H = gameCanvas.height;
   const sx = W / 276, sy = H / 180;
   const now = performance.now();
@@ -1931,6 +1933,21 @@ function mpClientHandleData(data) {
     if(badge) { badge.textContent = '👥 ' + data.names.length + ' players'; badge.style.display = 'block'; }
   } else if(data.type === 'chat') {
     mpReceiveChat(data.name, data.text);
+  } else if(data.type === 'spriteSync') {
+    // Apply host's sprite state so the game looks identical
+    const ss = data.sprites;
+    for(let i = 0; i < ss.length && i < sprites.length; i++) {
+      const s = sprites[i], r = ss[i];
+      if(r._x !== undefined) s._x = r._x;
+      if(r._y !== undefined) s._y = r._y;
+      if(r._vx !== undefined) s._vx = r._vx;
+      if(r._vy !== undefined) s._vy = r._vy;
+      if(r.visible !== undefined) s.visible = r.visible;
+      if(r.saying !== undefined) s.saying = r.saying;
+      if(r.color !== undefined) s.color = r.color;
+      if(r.sprW !== undefined) s.sprW = r.sprW;
+      if(r.sprH !== undefined) s.sprH = r.sprH;
+    }
   }
 }
 
@@ -1959,6 +1976,20 @@ function mpSendPosition() {
     bubble: player.bubble && player.bubble.frames > 0 ? { text: player.bubble.text, frames: player.bubble.frames } : null
   };
   mpConns.forEach(c => { try { c.send(data); } catch(e){} });
+  // Host syncs sprite state to all clients so the game looks the same for everyone
+  if(mpIsHost) mpSyncSpriteState();
+}
+
+let mpSpriteSync = 0;
+function mpSyncSpriteState() {
+  mpSpriteSync++;
+  if(mpSpriteSync % 2 !== 0) return; // send every other tick (~7.5/sec)
+  const ss = sprites.map(s => ({
+    _x: s._x, _y: s._y, _vx: s._vx, _vy: s._vy,
+    visible: s.visible, saying: s.saying || '', color: s.color,
+    sprW: s.sprW, sprH: s.sprH,
+  }));
+  mpBroadcast({ type: 'spriteSync', sprites: ss });
 }
 
 // Draw all remote players
