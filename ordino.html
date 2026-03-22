@@ -1827,7 +1827,7 @@ function selectMap(type) {
   // Add or remove Ground sprite based on map type
   const hasGround = sprites.some(s => s.isGround);
   if (type === 'ground' && !hasGround) {
-    sprites.push({name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true});
+    sprites.push({name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true});
   } else if (type === 'empty' && hasGround) {
     sprites = sprites.filter(s => !s.isGround);
     if (selectedSprite >= sprites.length) selectedSprite = sprites.length - 1;
@@ -1898,7 +1898,7 @@ const categories = [
 let currentCat=0;
 let sprites=[
   {name:'Spawn',x:50,y:135,color:'#4caf50',size:1,visible:true,saying:'',solid:false,isSpawn:true,gravity:false,hitbox:{w:24,h:24}},
-  {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true},
+  {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true},
 ];
 let selectedSprite=0;
 let isRunning=false;
@@ -1907,7 +1907,7 @@ let studioAF;
 function resetStudioForNewGame() {
   sprites=[
     {name:'Spawn',x:50,y:135,color:'#4caf50',size:1,visible:true,saying:'',solid:false,isSpawn:true,gravity:false,hitbox:{w:24,h:24}},
-    {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:9999,h:50},isGround:true},
+    {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true},
   ];
   studioMapType='ground';
   selectedSprite=0;
