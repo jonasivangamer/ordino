@@ -343,9 +343,18 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     <h2 style="color:#fff;margin:0 0 4px;font-size:1.3rem">👥 Multiplayer</h2>
     <p id="mpStatus" style="color:rgba(255,255,255,.5);font-size:.8rem;margin:0 0 18px">Connecting…</p>
     <div id="mpHostPanel" style="display:none">
-      <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin:0 0 8px">Share this Room Code:</p>
-      <div id="mpRoomCode" style="background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.3);border-radius:10px;padding:14px;font-size:1.6rem;font-weight:900;color:#ff8c00;letter-spacing:.15em;cursor:pointer;user-select:all" onclick="copyRoomCode()"></div>
-      <p style="color:rgba(255,255,255,.35);font-size:.7rem;margin:6px 0 14px">Click to copy</p>
+      <div style="display:flex;gap:8px;margin:0 0 12px">
+        <button id="mpHostPublicBtn" onclick="mpSetRoomType('public')" style="flex:1;padding:9px;background:rgba(76,175,80,.3);border:2px solid #66bb6a;border-radius:8px;color:#66bb6a;font-weight:700;cursor:pointer;font-size:.85rem">🌍 Public</button>
+        <button id="mpHostPrivateBtn" onclick="mpSetRoomType('private')" style="flex:1;padding:9px;background:rgba(255,255,255,.05);border:2px solid rgba(255,255,255,.15);border-radius:8px;color:#aaa;font-weight:700;cursor:pointer;font-size:.85rem">🔒 Private</button>
+      </div>
+      <div id="mpRoomCodeWrap" style="display:none">
+        <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin:0 0 8px">Share this Room Code:</p>
+        <div id="mpRoomCode" style="background:rgba(255,255,255,.1);border:2px dashed rgba(255,255,255,.3);border-radius:10px;padding:14px;font-size:1.6rem;font-weight:900;color:#ff8c00;letter-spacing:.15em;cursor:pointer;user-select:all" onclick="copyRoomCode()"></div>
+        <p style="color:rgba(255,255,255,.35);font-size:.7rem;margin:6px 0 14px">Click to copy</p>
+      </div>
+      <div id="mpPublicRoomMsg" style="display:none">
+        <p style="color:rgba(255,255,255,.5);font-size:.82rem;margin:0 0 10px">🌍 Anyone can find and join this room</p>
+      </div>
       <p id="mpPlayerCount" style="color:rgba(255,255,255,.6);font-size:.85rem;margin:0 0 12px">Players: 1</p>
       <button onclick="mpStartGame()" style="width:100%;padding:12px;background:#4caf50;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer">▶ Start Game</button>
     </div>
@@ -353,6 +362,8 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
       <p style="color:rgba(255,255,255,.7);font-size:.85rem;margin:0 0 8px">Enter Room Code:</p>
       <input id="mpJoinInput" type="text" maxlength="8" placeholder="ABCD1234" style="width:100%;padding:12px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:8px;color:#fff;font-size:1.2rem;text-align:center;letter-spacing:.12em;font-weight:700;outline:none;text-transform:uppercase">
       <button onclick="mpJoinRoom()" style="width:100%;padding:12px;margin-top:10px;background:#2196f3;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:1rem;cursor:pointer">🔗 Join</button>
+      <div style="position:relative;margin:12px 0 8px"><div style="border-top:1px solid rgba(255,255,255,.12);width:100%"></div><span style="position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:#1e1e2e;padding:0 10px;color:rgba(255,255,255,.3);font-size:.75rem">or</span></div>
+      <button onclick="mpJoinRandom()" style="width:100%;padding:12px;background:rgba(76,175,80,.2);border:1px solid rgba(76,175,80,.5);border-radius:8px;color:#66bb6a;font-weight:700;font-size:.95rem;cursor:pointer">🎲 Join Random Public Room</button>
       <p id="mpJoinStatus" style="color:rgba(255,255,255,.4);font-size:.78rem;margin:8px 0 0"></p>
     </div>
     <div style="display:flex;gap:8px;margin-top:14px">
@@ -1761,6 +1772,8 @@ function hideChat() {
 //  MULTIPLAYER (PeerJS WebRTC)
 // ════════════════════════════════════════════════════════
 let mpPeer = null, mpConns = [], mpIsHost = false, mpRoomId = '', mpActive = false;
+let mpRoomType = 'public'; // 'public' or 'private'
+const mpRoomsDB = gun.get('ordino-public-rooms-v2');
 let remotePlayers = {};  // { odeName: { x, y, dir, frame, onGround, name, bubble } }
 const MP_COLORS = ['#ff8c00','#2196f3','#e91e63','#00bcd4','#9c27b0','#ff5722','#009688','#673ab7','#cddc39','#f44336',
   '#3f51b5','#8bc34a','#ffc107','#607d8b','#e040fb','#00e676','#ff6e40','#448aff','#eeff41','#69f0ae',
@@ -1790,11 +1803,62 @@ function mpChoose(mode) {
   if(mode === 'host') {
     document.getElementById('mpHostPanel').style.display = 'block';
     document.getElementById('mpJoinPanel').style.display = 'none';
+    mpSetRoomType('public');
     mpHostRoom();
   } else {
     document.getElementById('mpHostPanel').style.display = 'none';
     document.getElementById('mpJoinPanel').style.display = 'block';
-    document.getElementById('mpStatus').textContent = 'Enter the host\'s room code';
+    document.getElementById('mpStatus').textContent = 'Enter a room code or join a random public room';
+  }
+}
+
+function mpSetRoomType(type) {
+  mpRoomType = type;
+  const pubBtn = document.getElementById('mpHostPublicBtn');
+  const prvBtn = document.getElementById('mpHostPrivateBtn');
+  const codeWrap = document.getElementById('mpRoomCodeWrap');
+  const pubMsg = document.getElementById('mpPublicRoomMsg');
+  if(type === 'public') {
+    pubBtn.style.background = 'rgba(76,175,80,.3)';
+    pubBtn.style.borderColor = '#66bb6a';
+    pubBtn.style.color = '#66bb6a';
+    prvBtn.style.background = 'rgba(255,255,255,.05)';
+    prvBtn.style.borderColor = 'rgba(255,255,255,.15)';
+    prvBtn.style.color = '#aaa';
+    codeWrap.style.display = 'none';
+    pubMsg.style.display = 'block';
+  } else {
+    prvBtn.style.background = 'rgba(255,140,0,.3)';
+    prvBtn.style.borderColor = '#ff8c00';
+    prvBtn.style.color = '#ff8c00';
+    pubBtn.style.background = 'rgba(255,255,255,.05)';
+    pubBtn.style.borderColor = 'rgba(255,255,255,.15)';
+    pubBtn.style.color = '#aaa';
+    codeWrap.style.display = 'block';
+    pubMsg.style.display = 'none';
+  }
+  // Update Gun listing
+  if(mpRoomId) mpRegisterPublicRoom();
+}
+
+function mpRegisterPublicRoom() {
+  if(mpRoomType === 'public' && mpRoomId) {
+    const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+    const g = games[currentGameIdx] || {};
+    mpRoomsDB.get(mpRoomId).put({
+      code: mpRoomId,
+      host: currentUser,
+      gameName: g.name || 'Unknown',
+      players: 1 + mpConns.length,
+      ts: Date.now(),
+      active: true
+    });
+  }
+}
+
+function mpUnregisterRoom() {
+  if(mpRoomId) {
+    mpRoomsDB.get(mpRoomId).put({ active: false });
   }
 }
 
@@ -1814,6 +1878,7 @@ function mpHostRoom() {
     document.getElementById('mpRoomCode').textContent = mpRoomId;
     document.getElementById('mpStatus').textContent = 'Room ready! Waiting for players…';
     document.getElementById('mpPlayerCount').textContent = 'Players: 1';
+    mpRegisterPublicRoom();
   });
   mpPeer.on('connection', conn => {
     conn.on('open', () => {
@@ -1836,6 +1901,7 @@ function mpUpdatePlayerCount() {
   const n = 1 + mpConns.length;
   document.getElementById('mpPlayerCount').textContent = 'Players: ' + n;
   mpBroadcastPlayerList();
+  mpRegisterPublicRoom(); // update player count in listing
 }
 
 function mpBroadcastPlayerList() {
@@ -1887,6 +1953,30 @@ function mpJoinRoom() {
   mpPeer.on('error', err => {
     document.getElementById('mpJoinStatus').textContent = '⚠️ ' + (err.type === 'peer-unavailable' ? 'Room not found' : err.type);
   });
+}
+
+function mpJoinRandom() {
+  document.getElementById('mpJoinStatus').textContent = '🔍 Searching for public rooms…';
+  const rooms = [];
+  const cutoff = Date.now() - 120000; // rooms active in last 2 minutes
+  mpRoomsDB.map().once(function(data, key) {
+    if(!data || !data.active || !data.code) return;
+    if(data.ts && data.ts > cutoff && data.host !== currentUser) {
+      rooms.push(data);
+    }
+  });
+  // Give Gun a moment to collect rooms, then pick one
+  setTimeout(() => {
+    if(rooms.length === 0) {
+      document.getElementById('mpJoinStatus').textContent = '😔 No public rooms found. Try again later!';
+      return;
+    }
+    // Pick a random room
+    const room = rooms[Math.floor(Math.random() * rooms.length)];
+    document.getElementById('mpJoinStatus').textContent = '🎲 Found room by ' + room.host + ' (' + room.gameName + ') — connecting…';
+    document.getElementById('mpJoinInput').value = room.code;
+    mpJoinRoom();
+  }, 1500);
 }
 
 // Host receives data from clients
@@ -2033,6 +2123,7 @@ function mpActualStartGame() {
 }
 
 function mpCleanup() {
+  mpUnregisterRoom();
   mpActive = false;
   remotePlayers = {};
   if(mpPeer) { mpPeer.destroy(); mpPeer = null; }
