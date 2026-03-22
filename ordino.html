@@ -1031,9 +1031,15 @@ function initWorld() {
 //  GAME BLOCK RUNTIME — executes blocks during gameplay
 // ════════════════════════════════════════════════════════
 let gbState = {}; // per-sprite runtime: { spriteIdx: { chains, timers, forever, repeatCounters } }
+let gbPlayerJoinFired = false; // fires once when local player starts the game
+let gbPlayersJoinFired = false; // fires when a remote player connects
+let gbPrevRemoteCount = 0; // track remote player count changes
 
 function initGameBlockState() {
   gbState = {};
+  gbPlayerJoinFired = true; // local player just joined
+  gbPlayersJoinFired = false;
+  gbPrevRemoteCount = Object.keys(remotePlayers).length;
   if (!gameBlocks || gameBlocks.length === 0) return;
   // Group blocks by sprite
   const bySprite = {};
@@ -1084,6 +1090,11 @@ function runGameBlocks(dt) {
   const sx = W / 276, sy = H / 180;
   const now = performance.now();
 
+  // Check if new remote players joined
+  const curRemoteCount = Object.keys(remotePlayers).length;
+  if (curRemoteCount > gbPrevRemoteCount) gbPlayersJoinFired = true;
+  gbPrevRemoteCount = curRemoteCount;
+
   for (const idx in gbState) {
     const si = parseInt(idx);
     const s = sprites[si];
@@ -1114,6 +1125,8 @@ function runGameBlocks(dt) {
           const k = head.vals && head.vals.key || 'Space';
           if (keys[k]) shouldStart = true;
         }
+        if (head.id === 'player_join' && gbPlayerJoinFired) shouldStart = true;
+        if (head.id === 'players_join' && gbPlayersJoinFired) shouldStart = true;
         if (head.id === 'touch_trigger') shouldStart = touching;
         if (head.id === 'touch_set_player') shouldStart = touching;
 
@@ -1238,6 +1251,9 @@ function runGameBlocks(dt) {
       }
     }
   }
+  // Reset one-shot event flags after all blocks processed
+  gbPlayerJoinFired = false;
+  gbPlayersJoinFired = false;
 }
 
 function gameLoop(ts) {
@@ -2112,6 +2128,8 @@ const categories = [
   {name:'Events',color:'#e6a817',blocks:[
     {id:'flag',label:'🚩 When flag clicked'},
     {id:'key_press',label:'⌨️ When',inputs:[{type:'select',opts:['Space','ArrowLeft','ArrowRight','ArrowUp'],name:'key'}],suffix:'key pressed'},
+    {id:'player_join',label:'👤 When player join'},
+    {id:'players_join',label:'👥 When players join'},
   ]},
   {name:'Motion',color:'#4c97ff',blocks:[
     {id:'move_x',label:'Move',inputs:[{type:'number',val:10,name:'steps'}],suffix:'steps right'},
@@ -2563,6 +2581,8 @@ async function executeBlocks() {
       case 'play_sound': if(p.sound==='boing')playBoing();else if(p.sound==='boom')playBoom();else playTone(600,0.12,'sine'); break;
       case 'touch_set_player': showToast('👆 Interact: sets player ' + (p.prop||'speed') + ' to ' + (p.val||0) + ' when touched in game'); break;
       case 'touch_trigger': showToast('👆 Interact: triggers when player touches this sprite in game'); break;
+      case 'player_join': showToast('👤 Runs when a player joins the game'); break;
+      case 'players_join': showToast('👥 Runs when other players join the game'); break;
     }
     if(id!=='wait'&&id!=='repeat'&&id!=='forever') await sleep(80);
   }
