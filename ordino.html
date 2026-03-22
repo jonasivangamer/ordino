@@ -222,41 +222,49 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
   .auth-logo{font-size:2rem}
   #browseNav{padding:0 10px;gap:8px;height:50px;flex-wrap:nowrap}
   .nav-logo{font-size:1rem}
-  .nav-btn{padding:6px 10px;font-size:.78rem}
+  .nav-btn{padding:8px 12px;font-size:.78rem;min-height:44px}
   .nav-user{font-size:.75rem;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #browseMain{padding:14px 10px}
   #gamesGrid{grid-template-columns:repeat(2,1fr);gap:10px}
   .game-card-thumb{height:80px;font-size:2rem}
   .game-card-body{padding:8px 10px}
   .game-card-name{font-size:.85rem}
-  .card-btn{padding:5px 0;font-size:.72rem}
+  .card-btn{padding:8px 0;font-size:.78rem;min-height:44px}
   #chatBox{width:100%;left:0;right:0;bottom:148px;border-radius:0;max-height:140px;padding:0 8px}
-  #chatToggleBtn{bottom:152px}
-  #backToBrowseBtn{top:8px;left:8px;padding:5px 10px;font-size:.75rem}
-  #settingsBtn{top:8px;right:8px;width:36px;height:36px;font-size:17px}
+  #chatInput{min-height:44px;font-size:1rem}
+  #chatSendBtn{min-height:44px;min-width:44px;font-size:1.1rem}
+  #chatToggleBtn{bottom:152px;width:44px;height:44px}
+  #backToBrowseBtn{top:8px;left:8px;padding:8px 12px;font-size:.8rem;min-height:44px}
+  #settingsBtn{top:8px;right:8px;width:44px;height:44px;font-size:18px}
   #mpPlayersBadge{top:8px;font-size:.7rem;padding:3px 10px}
+
+  /* ── MP OVERLAY MOBILE ── */
+  #mpOverlay > div{padding:20px 16px!important;width:92vw!important;max-width:380px}
+  #mpOverlay button{min-height:44px;font-size:.9rem}
+  #mpJoinInput{min-height:44px;font-size:1.1rem}
 
   /* ── STUDIO MOBILE ── */
   #studioHeader{height:auto;min-height:44px;flex-wrap:wrap;padding:6px 10px;gap:6px}
   #studioHeader .logo{font-size:.9rem;flex:1 0 100%;text-align:center}
-  .hdr-btn{padding:5px 10px;font-size:.78rem;flex:1}
+  .hdr-btn{padding:8px 10px;font-size:.78rem;flex:1;min-height:44px}
   #studioBody{flex-direction:column;overflow-y:auto}
   #palette{width:100%;max-height:180px;border-right:none;border-bottom:2px solid #111;order:2}
   #catTabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .cat-tab{flex:0 0 auto;padding:5px 10px;font-size:.72rem;white-space:nowrap}
+  .cat-tab{flex:0 0 auto;padding:8px 12px;font-size:.78rem;white-space:nowrap;min-height:44px}
   #blockList{max-height:100px}
   #scriptArea{min-height:200px;order:3}
   #rightPanel{width:100%;border-left:none;border-top:2px solid #111;order:1;max-height:50vh;overflow-y:auto}
   #stageContainer{padding:8px}
   #stageCanvas{width:100%!important;height:auto!important;max-width:300px;margin:0 auto;display:block}
   #spritePanel{padding:8px}
-  .spr-toggle-btn{padding:6px 12px;font-size:.78rem;min-height:36px}
-  .spr-hitbox-btn{padding:10px;font-size:.82rem;min-height:44px}
-  .spr-setting-row{flex-wrap:wrap;gap:4px}
-  #addSpriteBtn{padding:10px;font-size:.88rem;min-height:44px}
-  .gs-num{width:60px;padding:6px 8px;font-size:.88rem;min-height:36px}
+  .spr-toggle-btn{padding:8px 12px;font-size:.82rem;min-height:44px}
+  .spr-hitbox-btn{padding:10px;font-size:.85rem;min-height:44px}
+  .spr-setting-row{flex-wrap:wrap;gap:6px}
+  #addSpriteBtn{padding:12px;font-size:.9rem;min-height:48px}
+  .gs-num{width:64px;padding:8px;font-size:.9rem;min-height:44px}
+  .gs-slider{height:28px}
   .gs-input{padding:10px 12px;font-size:.95rem;min-height:44px}
-  .right-tab{padding:12px 0;font-size:.78rem;min-height:44px}
+  .right-tab{padding:12px 0;font-size:.82rem;min-height:44px}
   .publish-btn{padding:14px;font-size:1rem;min-height:48px}
 
   /* Map chooser mobile */
@@ -265,12 +273,15 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 
   /* Modal panels mobile */
   .modal-panel{min-width:auto;width:92vw;max-width:380px;padding:20px 18px}
+  .modal-panel button{min-height:44px}
+  .modal-panel input[type=number],.modal-panel input[type=text]{min-height:44px;font-size:.9rem}
 }
 
 /* ── PIXEL ART & HITBOX MODALS MOBILE ── */
 @media(max-width:420px){
   #pixelDrawModal > div, #hitboxModal > div{width:92vw!important;max-width:380px;padding:14px!important}
   #pixelCanvas, #hitboxCanvas{width:min(280px,80vw)!important;height:min(280px,80vw)!important}
+  #pixelDrawModal button, #hitboxModal button{min-height:44px;font-size:.85rem}
   #gamesGrid{grid-template-columns:1fr!important}
   #mapChooserModal > div > div:last-of-type{flex-direction:column!important;align-items:center}
 }
@@ -2447,16 +2458,16 @@ function buildSpriteSettings() {
     </div>
     <div class="spr-setting-row">
       <span class="spr-setting-label">Width</span>
-      <input type="number" min="4" max="2000" value="${spr.sprW||16}" onchange="resizeSprite(+this.value, ${spr.sprH||16})" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <input type="number" min="4" max="2000" value="${spr.sprW||16}" onchange="resizeSprite(+this.value, ${spr.sprH||16})" style="width:64px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:8px 6px;color:#fff;font-size:.9rem;outline:none;text-align:center;min-height:44px">
       <span class="spr-setting-label" style="margin-left:8px">Height</span>
-      <input type="number" min="4" max="2000" value="${spr.sprH||16}" onchange="resizeSprite(${spr.sprW||16}, +this.value)" style="width:58px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:7px 6px;color:#fff;font-size:.85rem;outline:none;text-align:center;min-height:36px">
+      <input type="number" min="4" max="2000" value="${spr.sprH||16}" onchange="resizeSprite(${spr.sprW||16}, +this.value)" style="width:64px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:8px 6px;color:#fff;font-size:.9rem;outline:none;text-align:center;min-height:44px">
       <span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:6px">px</span>
     </div>
     <button class="spr-hitbox-btn" onclick="openHitboxEditor()">⬜ Edit Hitbox</button>
     ${spr.name !== 'Spawn' ? `<button class="spr-hitbox-btn" onclick="openSpriteDrawer()" style="margin-top:6px;background:rgba(124,77,255,.18);border-color:rgba(124,77,255,.5)">🎨 Draw Sprite</button>` : ''}
     <div class="spr-setting-row" style="margin-top:8px">
       <span class="spr-setting-label">Name</span>
-      <input type="text" value="${spr.name}" onchange="renameSprite(this.value)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:5px 8px;color:#fff;font-size:.85rem;outline:none">
+      <input type="text" value="${spr.name}" onchange="renameSprite(this.value)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:8px;color:#fff;font-size:.9rem;outline:none;min-height:44px">
     </div>
     <button class="spr-hitbox-btn" onclick="copySprite()" style="margin-top:8px;background:rgba(33,150,243,.15);border-color:rgba(33,150,243,.5);color:#42a5f5">📋 Copy Sprite</button>
     <button class="spr-hitbox-btn" onclick="deleteSprite()" style="margin-top:8px;background:rgba(229,57,53,.15);border-color:rgba(229,57,53,.5);color:#ef5350">🗑 Delete Sprite</button>
@@ -2679,7 +2690,9 @@ function buildPixelPalette() {
     const btn = document.createElement('button');
     btn.dataset.color = color;
     btn.className = 'px-pal-btn';
-    btn.style.cssText = `width:26px;height:26px;border-radius:5px;border:2px solid transparent;cursor:pointer;background:${color === 'erase' ? '#333' : color};font-size:.8rem;display:flex;align-items:center;justify-content:center;`;
+    const isMobile = window.matchMedia('(max-width:600px)').matches;
+    const sz = isMobile ? '36px' : '26px';
+    btn.style.cssText = `width:${sz};height:${sz};border-radius:5px;border:2px solid transparent;cursor:pointer;background:${color === 'erase' ? '#333' : color};font-size:.8rem;display:flex;align-items:center;justify-content:center;`;
     if (color === 'erase') btn.textContent = '✕';
     btn.onclick = () => { _activePixelColor = color; refreshPaletteSelection(); };
     el.appendChild(btn);
