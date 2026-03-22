@@ -387,7 +387,7 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     <div class="setting-row"><label>🖥️ Quality</label><select class="setting-select" id="qualitySelect"><option>High</option><option>Medium</option><option>Low</option></select></div>
     <div style="margin:12px 0 6px;font-weight:700;font-size:.85rem;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em">🏃 Player Settings</div>
     <div class="setting-row"><label>Speed</label><input type="range" id="igSpeed" min="1" max="12" step="0.5" value="4" style="flex:1;accent-color:#7c4dff" oninput="SPEED=parseFloat(this.value);document.getElementById('igSpeedVal').textContent=this.value"><span id="igSpeedVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">4</span></div>
-    <div class="setting-row"><label>Gravity</label><input type="range" id="igGrav" min="0.1" max="2" step="0.05" value="0.55" style="flex:1;accent-color:#7c4dff" oninput="GRAVITY=parseFloat(this.value);document.getElementById('igGravVal').textContent=this.value"><span id="igGravVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">0.55</span></div>
+    <div class="setting-row"><label>Gravity</label><input type="range" id="igGrav" min="0" max="2" step="0.05" value="0.55" style="flex:1;accent-color:#7c4dff" oninput="GRAVITY=parseFloat(this.value);document.getElementById('igGravVal').textContent=this.value"><span id="igGravVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">0.55</span></div>
     <div class="setting-row"><label>Jump Height</label><input type="range" id="igJump" min="4" max="24" step="0.5" value="13" style="flex:1;accent-color:#7c4dff" oninput="JUMP_FORCE=parseFloat(this.value);document.getElementById('igJumpVal').textContent=this.value"><span id="igJumpVal" style="min-width:28px;text-align:right;color:#fff;font-size:.85rem">13</span></div>
     <button class="modal-btn studio-btn" id="openStudioBtn">🛠️ Open Ordino Studio</button>
     <button class="modal-btn close-btn" id="closeSettingsBtn">✕ Close</button>
@@ -473,8 +473,8 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 
         <span class="gs-label">Gravity</span>
         <div class="gs-slider-row">
-          <input class="gs-slider" type="range" id="gsGravSlider" min="0.1" max="2" step="0.05" value="0.55" oninput="syncGS('grav')">
-          <input class="gs-num" id="gsGravNum" type="number" min="0.1" max="2" step="0.05" value="0.55" oninput="syncGS('gravNum')">
+          <input class="gs-slider" type="range" id="gsGravSlider" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('grav')">
+          <input class="gs-num" id="gsGravNum" type="number" min="0" max="2" step="0.05" value="0.55" oninput="syncGS('gravNum')">
         </div>
 
         <span class="gs-label">Jump Height</span>
