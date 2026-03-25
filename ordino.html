@@ -1097,6 +1097,17 @@ function runGameBlocks(dt) {
   const sx = W / 276, sy = H / 180;
   const now = performance.now();
 
+  // Advance sprite animations
+  for (const s of sprites) {
+    if (s._animPlaying && s.animations && s.animations.length > 0) {
+      if (now - (s._animLastT || 0) >= (s._animSpeed || 100)) {
+        s._animFrame = ((s._animFrame || 0) + 1) % s.animations.length;
+        s.pixels = [...s.animations[s._animFrame]];
+        s._animLastT = now;
+      }
+    }
+  }
+
   // Check if new remote players joined
   const curRemoteCount = Object.keys(remotePlayers).length;
   if (curRemoteCount > gbPrevRemoteCount) gbPlayersJoinFired = true;
@@ -1182,6 +1193,17 @@ function runGameBlocks(dt) {
           case 'change_color': s.color = v.color || '#ff4444'; cs.pc++; break;
           case 'show': s.visible = true; cs.pc++; break;
           case 'hide': s.visible = false; cs.pc++; break;
+          case 'start_anim':
+            if (s.animations && s.animations.length > 0) {
+              s._animPlaying = true;
+              s._animSpeed = val('speed', 100);
+              s._animFrame = 0;
+              s._animLastT = now;
+            }
+            cs.pc++; break;
+          case 'stop_anim':
+            s._animPlaying = false;
+            cs.pc++; break;
 
           // Control
           case 'wait':
@@ -2261,6 +2283,8 @@ const categories = [
     {id:'change_color',label:'🎨 Set color to',inputs:[{type:'color',val:'#ff4444',name:'color'}]},
     {id:'show',label:'👁️ Show'},
     {id:'hide',label:'🙈 Hide'},
+    {id:'start_anim',label:'🎞 Start animation',inputs:[{type:'number',val:100,name:'speed'}],suffix:'ms/frame'},
+    {id:'stop_anim',label:'⏹ Stop animation'},
   ]},
   {name:'Control',color:'#ffab19',blocks:[
     {id:'wait',label:'⏱ Wait',inputs:[{type:'number',val:1,name:'secs'}],suffix:'secs'},
@@ -2720,6 +2744,14 @@ async function executeBlocks() {
       case 'touch_trigger': showToast('👆 Interact: triggers when player touches this sprite in game'); break;
       case 'player_join': showToast('👤 Runs when a player joins the game'); break;
       case 'players_join': showToast('👥 Runs when other players join the game'); break;
+      case 'start_anim':
+        if (spr.animations && spr.animations.length > 0) {
+          showToast('🎞 Animation started (' + spr.animations.length + ' frames, ' + (p.speed||100) + 'ms)');
+        } else {
+          showToast('⚠️ No animation frames! Click + Frame in sprite settings');
+        }
+        break;
+      case 'stop_anim': showToast('⏹ Animation stopped'); break;
     }
     if(id!=='wait'&&id!=='repeat'&&id!=='forever') await sleep(80);
   }
@@ -2914,6 +2946,20 @@ function buildSpriteSettings() {
     </div>
     <button class="spr-hitbox-btn" onclick="openHitboxEditor()">⬜ Edit Hitbox</button>
     ${spr.name !== 'Spawn' ? `<button class="spr-hitbox-btn" onclick="openSpriteDrawer()" style="margin-top:6px;background:rgba(124,77,255,.18);border-color:rgba(124,77,255,.5)">🎨 Draw Sprite</button>` : ''}
+    ${spr.name !== 'Spawn' ? `
+    <div style="margin-top:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span class="spr-setting-label" style="flex:1">🎞 Animations (${(spr.animations||[]).length} frames)</span>
+        <button class="spr-hitbox-btn" onclick="openAnimFrame()" style="margin:0;padding:6px 10px;font-size:.75rem;background:rgba(0,188,212,.18);border-color:rgba(0,188,212,.5);min-height:36px">+ Frame</button>
+      </div>
+      ${(spr.animations||[]).map((a,i) => `
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:3px">
+          <span style="color:rgba(255,255,255,.5);font-size:.72rem;min-width:46px">Frame ${i+1}</span>
+          <button onclick="editAnimFrame(${i})" style="flex:1;padding:5px 8px;background:rgba(124,77,255,.15);border:1px solid rgba(124,77,255,.4);border-radius:5px;color:#b388ff;font-size:.72rem;cursor:pointer;min-height:36px">🎨 Edit</button>
+          <button onclick="deleteAnimFrame(${i})" style="padding:5px 8px;background:rgba(229,57,53,.15);border:1px solid rgba(229,57,53,.4);border-radius:5px;color:#ef5350;font-size:.72rem;cursor:pointer;min-height:36px">🗑</button>
+        </div>
+      `).join('')}
+    </div>` : ''}
     <div class="spr-setting-row" style="margin-top:8px">
       <span class="spr-setting-label">Name</span>
       <input type="text" value="${spr.name}" onchange="renameSprite(this.value)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:8px;color:#fff;font-size:.9rem;outline:none;min-height:44px">
@@ -3172,7 +3218,60 @@ function openSpriteDrawer() {
 }
 
 function closePixelDrawer() {
+  // If editing an animation frame, save pixels back to that frame
+  if (_editingAnimFrame >= 0) {
+    const spr = sprites[selectedSprite];
+    if (spr && spr.animations && spr.animations[_editingAnimFrame]) {
+      spr.animations[_editingAnimFrame] = [...spr.pixels];
+    }
+    // Restore original pixels
+    if (_origPixelsBackup) spr.pixels = _origPixelsBackup;
+    _editingAnimFrame = -1;
+    _origPixelsBackup = null;
+    buildSpriteSettings();
+  }
   document.getElementById('pixelDrawModal').style.display = 'none';
+}
+
+let _editingAnimFrame = -1;
+let _origPixelsBackup = null;
+
+function openAnimFrame() {
+  const spr = sprites[selectedSprite];
+  if (!spr || spr.name === 'Spawn') return;
+  if (!spr.animations) spr.animations = [];
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  // Copy current sprite pixels as starting point for new frame
+  const frame = spr.pixels ? [...spr.pixels] : new Array(cols * rows).fill('');
+  spr.animations.push(frame);
+  buildSpriteSettings();
+  // Open the editor for this new frame
+  editAnimFrame(spr.animations.length - 1);
+}
+
+function editAnimFrame(idx) {
+  const spr = sprites[selectedSprite];
+  if (!spr || !spr.animations || !spr.animations[idx]) return;
+  const cols = spr.sprW || 16, rows = spr.sprH || 16;
+  // Backup original pixels
+  _origPixelsBackup = spr.pixels ? [...spr.pixels] : new Array(cols * rows).fill('');
+  _editingAnimFrame = idx;
+  // Load frame pixels into spr.pixels so the editor works
+  spr.pixels = [...spr.animations[idx]];
+  // Ensure correct size
+  if (spr.pixels.length !== cols * rows) {
+    const np = new Array(cols * rows).fill('');
+    for (let i = 0; i < Math.min(spr.pixels.length, np.length); i++) np[i] = spr.pixels[i];
+    spr.pixels = np;
+  }
+  openSpriteDrawer();
+}
+
+function deleteAnimFrame(idx) {
+  const spr = sprites[selectedSprite];
+  if (!spr || !spr.animations) return;
+  spr.animations.splice(idx, 1);
+  buildSpriteSettings();
 }
 
 function renderPixelCanvas() {
