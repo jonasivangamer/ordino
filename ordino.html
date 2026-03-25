@@ -1027,6 +1027,11 @@ function initWorld() {
     s._y = s.y * (H / 180);
     s._vy = 0;
     s._vx = 0;
+    s._animPlaying = false;
+    s._animFrames = null;
+    s._animFrame = 0;
+    s._animLastT = 0;
+    s._animSpeed = 100;
   }
   // Init runtime block state per sprite
   initGameBlockState();
@@ -1090,14 +1095,9 @@ function initGameBlockState() {
 }
 
 function runGameBlocks(dt) {
-  if (!gameBlocks || gameBlocks.length === 0) return;
-  // In multiplayer, only the host runs block scripts — clients receive synced state
-  if (mpActive && !mpIsHost) return;
-  const W = gameCanvas.width, H = gameCanvas.height;
-  const sx = W / 276, sy = H / 180;
   const now = performance.now();
 
-  // Advance sprite animations
+  // Advance sprite animations (always runs, even with no blocks)
   for (const s of sprites) {
     if (s._animPlaying && s._animFrames && s._animFrames.length > 0) {
       if (now - (s._animLastT || 0) >= (s._animSpeed || 100)) {
@@ -1107,6 +1107,12 @@ function runGameBlocks(dt) {
       }
     }
   }
+
+  if (!gameBlocks || gameBlocks.length === 0) return;
+  // In multiplayer, only the host runs block scripts — clients receive synced state
+  if (mpActive && !mpIsHost) return;
+  const W = gameCanvas.width, H = gameCanvas.height;
+  const sx = W / 276, sy = H / 180;
 
   // Check if new remote players joined
   const curRemoteCount = Object.keys(remotePlayers).length;
@@ -2296,7 +2302,7 @@ const categories = [
     {id:'change_color',label:'🎨 Set color to',inputs:[{type:'color',val:'#ff4444',name:'color'}]},
     {id:'show',label:'👁️ Show'},
     {id:'hide',label:'🙈 Hide'},
-    {id:'start_anim',label:'🎞 Start animation',inputs:[{type:'text',val:'Anim 1',name:'anim'}]},
+    {id:'start_anim',label:'🎞 Start animation',inputs:[{type:'anim_select',name:'anim'}]},
     {id:'stop_anim',label:'⏹ Stop animation'},
   ]},
   {name:'Control',color:'#ffab19',blocks:[
@@ -2445,6 +2451,12 @@ function makeInput(inp,isT) {
   if(inp.type==='text') return `<input class="pb-input" type="text" value="${inp.val||''}" data-name="${inp.name}" style="width:60px" ${stop}>`;
   if(inp.type==='color') return `<input type="color" value="${inp.val||'#ff0000'}" data-name="${inp.name}" style="width:28px;height:22px;border:none;border-radius:3px;cursor:pointer;background:none" ${stop}>`;
   if(inp.type==='select') return `<select class="pb-select" data-name="${inp.name}" ${stopSel}>${inp.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+  if(inp.type==='anim_select') {
+    const spr = sprites[selectedSprite];
+    const anims = (spr && spr.anims) ? spr.anims.map(a=>a.name) : ['(none)'];
+    if(anims.length===0) anims.push('(none)');
+    return `<select class="pb-select" data-name="${inp.name}" ${stopSel} onfocus="refreshAnimSelect(this)">${anims.map(o=>`<option>${o}</option>`).join('')}</select>`;
+  }
   return '';
 }
 
@@ -3343,6 +3355,14 @@ function getAnimNames(sprIdx) {
   const spr = sprites[sprIdx];
   if (!spr || !spr.anims || spr.anims.length === 0) return ['(none)'];
   return spr.anims.map(a => a.name);
+}
+
+// Refresh animation select dropdown when focused (picks up newly added animations)
+function refreshAnimSelect(sel) {
+  const cur = sel.value;
+  const spr = sprites[selectedSprite];
+  const names = (spr && spr.anims && spr.anims.length > 0) ? spr.anims.map(a => a.name) : ['(none)'];
+  sel.innerHTML = names.map(n => `<option${n === cur ? ' selected' : ''}>${n}</option>`).join('');
 }
 
 function renderPixelCanvas() {
