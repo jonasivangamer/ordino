@@ -2983,7 +2983,10 @@ function buildSpriteSettings() {
             ${anim.frames.map((f,fi) => `
               <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
                 <button onclick="editAnimFrame(${ai},${fi})" style="width:36px;height:36px;background:rgba(124,77,255,.15);border:1px solid rgba(124,77,255,.4);border-radius:5px;color:#b388ff;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${fi+1}</button>
-                <button onclick="deleteAnimFrame(${ai},${fi})" style="width:36px;padding:1px;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.3);border-radius:3px;color:#ef5350;font-size:.55rem;cursor:pointer">✕</button>
+                <div style="display:flex;gap:1px">
+                  <button onclick="copyAnimFrame(${ai},${fi})" style="width:17px;padding:1px;background:rgba(33,150,243,.1);border:1px solid rgba(33,150,243,.3);border-radius:3px;color:#42a5f5;font-size:.5rem;cursor:pointer" title="Copy">📋</button>
+                  <button onclick="deleteAnimFrame(${ai},${fi})" style="width:17px;padding:1px;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.3);border-radius:3px;color:#ef5350;font-size:.5rem;cursor:pointer" title="Delete">✕</button>
+                </div>
               </div>
             `).join('')}
             <button onclick="addAnimFrame(${ai})" style="width:36px;height:36px;background:rgba(0,188,212,.12);border:1px dashed rgba(0,188,212,.5);border-radius:5px;color:#00bcd4;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
@@ -3319,6 +3322,13 @@ function editAnimFrame(ai, fi) {
     spr.pixels = np;
   }
   openSpriteDrawer();
+}
+
+function copyAnimFrame(ai, fi) {
+  const spr = sprites[selectedSprite];
+  if (!spr || !spr.anims || !spr.anims[ai] || !spr.anims[ai].frames[fi]) return;
+  spr.anims[ai].frames.splice(fi + 1, 0, [...spr.anims[ai].frames[fi]]);
+  buildSpriteSettings();
 }
 
 function deleteAnimFrame(ai, fi) {
