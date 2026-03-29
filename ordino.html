@@ -269,9 +269,21 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
   .publish-btn{padding:14px;font-size:1rem;min-height:48px}
 
   /* Block inputs mobile */
-  .pb-input{width:44px;padding:6px;font-size:.85rem;min-height:32px}
-  .pb-select{padding:6px;font-size:.85rem;min-height:32px}
-  .palette-block input[type=color]{width:36px!important;height:32px!important}
+  .pb-input{width:48px;padding:6px;font-size:.85rem;min-height:44px}
+  .pb-select{padding:6px;font-size:.85rem;min-height:44px}
+  .palette-block input[type=color]{width:44px!important;height:44px!important}
+
+  /* Animation editor mobile */
+  .anim-name-input{min-height:44px!important;font-size:.85rem!important;padding:8px!important}
+  .anim-del-btn{min-height:44px!important;min-width:44px!important;font-size:.85rem!important;padding:8px!important}
+  .anim-speed-slider{min-height:44px!important}
+  .anim-frame-btn{width:44px!important;height:44px!important;font-size:.8rem!important}
+  .anim-frame-sub{width:28px!important;min-height:28px!important;font-size:.6rem!important;padding:3px!important}
+  .anim-add-frame{width:44px!important;height:44px!important;font-size:1.2rem!important}
+  .anim-add-btn{min-height:44px!important;font-size:.82rem!important;padding:8px 12px!important}
+
+  /* Block delete button mobile */
+  .block-del-btn{min-width:32px!important;min-height:32px!important;font-size:14px!important;padding:6px 8px!important;top:0px!important;right:2px!important}
 
   /* Map chooser mobile */
   #mapChooserModal > div{padding:20px 16px!important;width:92vw!important;max-width:380px}
@@ -2589,6 +2601,7 @@ function dropBlock(blockDef,color,x,y,savedVals,uid,snapParent){
   // Delete button on every block
   const delBtn=document.createElement('span');
   delBtn.textContent='✕';
+  delBtn.className='block-del-btn';
   delBtn.style.cssText='position:absolute;top:3px;right:5px;cursor:pointer;font-size:12px;color:rgba(255,255,255,.45);font-weight:700;line-height:1;padding:2px 5px;border-radius:4px;z-index:20';
   delBtn.title='Delete block';
   delBtn.onmouseenter=()=>{delBtn.style.color='#ff4444';delBtn.style.background='rgba(0,0,0,.3)';};
@@ -2984,30 +2997,30 @@ function buildSpriteSettings() {
     <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <span class="spr-setting-label" style="flex:1">🎞 Animations (${(spr.anims||[]).length})</span>
-        <button class="spr-hitbox-btn" onclick="addAnimation()" style="margin:0;padding:6px 10px;font-size:.75rem;background:rgba(0,188,212,.18);border-color:rgba(0,188,212,.5);min-height:36px">+ Animation</button>
+        <button class="spr-hitbox-btn anim-add-btn" onclick="addAnimation()" style="margin:0;padding:6px 10px;font-size:.75rem;background:rgba(0,188,212,.18);border-color:rgba(0,188,212,.5);min-height:36px">+ Animation</button>
       </div>
       ${(spr.anims||[]).map((anim,ai) => `
         <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;margin-bottom:6px">
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-            <input type="text" value="${escHtml(anim.name)}" onchange="renameAnim(${ai},this.value)" placeholder="Name" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:5px 8px;color:#fff;font-size:.78rem;outline:none;min-height:36px">
-            <button onclick="deleteAnimation(${ai})" style="padding:5px 8px;background:rgba(229,57,53,.15);border:1px solid rgba(229,57,53,.4);border-radius:5px;color:#ef5350;font-size:.72rem;cursor:pointer;min-height:36px">🗑</button>
+            <input type="text" value="${escHtml(anim.name)}" onchange="renameAnim(${ai},this.value)" placeholder="Name" class="anim-name-input" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:5px 8px;color:#fff;font-size:.78rem;outline:none;min-height:36px">
+            <button onclick="deleteAnimation(${ai})" class="anim-del-btn" style="padding:5px 8px;background:rgba(229,57,53,.15);border:1px solid rgba(229,57,53,.4);border-radius:5px;color:#ef5350;font-size:.72rem;cursor:pointer;min-height:36px">🗑</button>
           </div>
           <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
             <span style="color:rgba(255,255,255,.45);font-size:.7rem">Speed</span>
-            <input type="range" min="30" max="1000" value="${anim.speed||100}" oninput="setAnimSpeed(${ai},+this.value);this.nextElementSibling.textContent=this.value+'ms'" style="flex:1;min-height:36px">
+            <input type="range" min="30" max="1000" value="${anim.speed||100}" oninput="setAnimSpeed(${ai},+this.value);this.nextElementSibling.textContent=this.value+'ms'" class="anim-speed-slider" style="flex:1;min-height:36px">
             <span style="color:rgba(255,255,255,.5);font-size:.7rem;min-width:36px">${anim.speed||100}ms</span>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px">
             ${anim.frames.map((f,fi) => `
               <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-                <button onclick="editAnimFrame(${ai},${fi})" style="width:36px;height:36px;background:rgba(124,77,255,.15);border:1px solid rgba(124,77,255,.4);border-radius:5px;color:#b388ff;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${fi+1}</button>
-                <div style="display:flex;gap:1px">
-                  <button onclick="copyAnimFrame(${ai},${fi})" style="width:17px;padding:1px;background:rgba(33,150,243,.1);border:1px solid rgba(33,150,243,.3);border-radius:3px;color:#42a5f5;font-size:.5rem;cursor:pointer" title="Copy">📋</button>
-                  <button onclick="deleteAnimFrame(${ai},${fi})" style="width:17px;padding:1px;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.3);border-radius:3px;color:#ef5350;font-size:.5rem;cursor:pointer" title="Delete">✕</button>
+                <button onclick="editAnimFrame(${ai},${fi})" class="anim-frame-btn" style="width:36px;height:36px;background:rgba(124,77,255,.15);border:1px solid rgba(124,77,255,.4);border-radius:5px;color:#b388ff;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center">${fi+1}</button>
+                <div style="display:flex;gap:2px">
+                  <button onclick="copyAnimFrame(${ai},${fi})" class="anim-frame-sub" style="width:17px;padding:1px;background:rgba(33,150,243,.1);border:1px solid rgba(33,150,243,.3);border-radius:3px;color:#42a5f5;font-size:.5rem;cursor:pointer" title="Copy">📋</button>
+                  <button onclick="deleteAnimFrame(${ai},${fi})" class="anim-frame-sub" style="width:17px;padding:1px;background:rgba(229,57,53,.1);border:1px solid rgba(229,57,53,.3);border-radius:3px;color:#ef5350;font-size:.5rem;cursor:pointer" title="Delete">✕</button>
                 </div>
               </div>
             `).join('')}
-            <button onclick="addAnimFrame(${ai})" style="width:36px;height:36px;background:rgba(0,188,212,.12);border:1px dashed rgba(0,188,212,.5);border-radius:5px;color:#00bcd4;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+            <button onclick="addAnimFrame(${ai})" class="anim-add-frame" style="width:36px;height:36px;background:rgba(0,188,212,.12);border:1px dashed rgba(0,188,212,.5);border-radius:5px;color:#00bcd4;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
           </div>
         </div>
       `).join('')}
