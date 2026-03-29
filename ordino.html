@@ -660,6 +660,7 @@ function showBrowse() {
 }
 
 let cloudGames = []; // games loaded from Gun cloud
+let cloudLoading = false;
 
 function renderGamesGrid() {
   const grid = document.getElementById('gamesGrid');
@@ -687,9 +688,13 @@ function renderGamesGrid() {
     communityGames.forEach((g, ci) => {
       grid.appendChild(makeGameCard(g, ci, 'cloud'));
     });
+  } else if (cloudLoading) {
+    const loadDiv = document.createElement('div');
+    loadDiv.innerHTML = '<div style="margin:18px 0 10px;font-size:.85rem;color:rgba(255,255,255,.5)">🌍 Community Games</div><div style="text-align:center;padding:20px;color:rgba(255,255,255,.35);font-size:.85rem">Loading community games...</div>';
+    grid.appendChild(loadDiv);
   }
 
-  if (myGames.length === 0 && communityGames.length === 0) {
+  if (myGames.length === 0 && communityGames.length === 0 && !cloudLoading) {
     grid.innerHTML = '<div class="browse-empty">No games yet! Click <strong>+ Create Game</strong> to make the first one.</div>';
   }
 
@@ -774,7 +779,7 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // ════════════════════════════════════════════════════════
 //  CLOUD (Gun.js — decentralized game sharing)
 // ════════════════════════════════════════════════════════
-const gun = Gun(['https://gun-manhattan.herokuapp.com/gun', 'https://gun-us.herokuapp.com/gun']);
+const gun = Gun(['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun']);
 const cloudDB = gun.get('ordino-public-games-v1');
 
 function cloudPublish(gameData) {
@@ -805,7 +810,12 @@ function cloudPublish(gameData) {
 
 function cloudLoadGames() {
   cloudGames = [];
+  cloudLoading = true;
+  renderGamesGrid();
+  // Stop loading indicator after 8 seconds if no response
+  setTimeout(() => { if (cloudLoading) { cloudLoading = false; renderGamesGrid(); } }, 8000);
   cloudDB.map().once(function(data, key) {
+    cloudLoading = false;
     if (!data || !data.name) return;
     try {
       const g = {
