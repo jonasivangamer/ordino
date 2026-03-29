@@ -323,7 +323,7 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 <div id="browseScreen">
   <div id="browseNav">
     <span class="nav-logo">Ord<span>ino</span></span>
-    <span class="nav-user" id="navUser"></span>
+    <span class="nav-user" id="navUser" onclick="openProfile()" style="cursor:pointer"></span>
     <button class="nav-btn nav-btn-create" onclick="startNewGame()">+ Create Game</button>
     <button class="nav-btn nav-btn-logout" onclick="logout()">Logout</button>
   </div>
@@ -351,6 +351,41 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
       </button>
     </div>
     <button onclick="document.getElementById('publishModal').style.display='none'" style="margin-top:14px;padding:8px 20px;background:none;border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.45);cursor:pointer;font-size:.8rem">Cancel</button>
+  </div>
+</div>
+
+<!-- ── PROFILE MODAL ── -->
+<div id="profileModal" style="display:none;position:fixed;inset:0;z-index:9500;align-items:center;justify-content:center">
+  <div id="profileBg" style="position:absolute;inset:0"></div>
+  <div style="position:relative;background:rgba(20,20,35,.92);backdrop-filter:blur(16px);border-radius:20px;padding:28px 28px 22px;width:min(360px,92vw);box-shadow:0 16px 60px rgba(0,0,0,.7);text-align:center;border:1px solid rgba(255,255,255,.1)">
+    <div style="font-size:.7rem;color:rgba(255,255,255,.3);margin-bottom:12px;letter-spacing:.08em">MY PROFILE</div>
+    <canvas id="profilePlayerCanvas" width="120" height="120" style="width:120px;height:120px;display:block;margin:0 auto 14px;border-radius:12px;background:rgba(0,0,0,.3);border:2px solid rgba(255,255,255,.08)"></canvas>
+    <div id="profileName" style="font-size:1.3rem;font-weight:800;color:#fff;margin-bottom:2px"></div>
+    <div id="profileJoinDate" style="font-size:.75rem;color:rgba(255,255,255,.35);margin-bottom:16px"></div>
+    <div style="background:rgba(255,255,255,.05);border-radius:10px;padding:12px 14px;text-align:left;margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="color:rgba(255,255,255,.5);font-size:.78rem">👤 Username</span>
+        <span id="profileUsername" style="color:#fff;font-size:.88rem;font-weight:600"></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:rgba(255,255,255,.5);font-size:.78rem">🔑 Password</span>
+        <span style="display:flex;align-items:center;gap:6px">
+          <span id="profilePassword" style="color:#fff;font-size:.88rem;font-weight:600;letter-spacing:.1em">••••••</span>
+          <button id="profileShowPwBtn" onclick="toggleProfilePassword()" style="background:rgba(255,255,255,.1);border:none;border-radius:6px;padding:4px 8px;color:rgba(255,255,255,.6);font-size:.72rem;cursor:pointer">Show</button>
+        </span>
+      </div>
+    </div>
+    <div id="profileStats" style="display:flex;gap:8px;margin-bottom:16px">
+      <div style="flex:1;background:rgba(255,255,255,.05);border-radius:8px;padding:10px 6px">
+        <div id="profileGameCount" style="font-size:1.2rem;font-weight:800;color:#ff8c00">0</div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.4)">Games Made</div>
+      </div>
+      <div style="flex:1;background:rgba(255,255,255,.05);border-radius:8px;padding:10px 6px">
+        <div id="profilePublicCount" style="font-size:1.2rem;font-weight:800;color:#66bb6a">0</div>
+        <div style="font-size:.68rem;color:rgba(255,255,255,.4)">Public</div>
+      </div>
+    </div>
+    <button onclick="closeProfile()" style="width:100%;padding:11px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:10px;color:rgba(255,255,255,.7);font-weight:600;cursor:pointer;font-size:.88rem">Close</button>
   </div>
 </div>
 
@@ -612,6 +647,87 @@ function doAuth(mode) {
   } catch(err) {
     setAuthError('Error: ' + err.message);
   }
+}
+
+// ── Profile Modal ──
+const PROFILE_BGS = [
+  'linear-gradient(135deg,#667eea 0%,#764ba2 100%)',
+  'linear-gradient(135deg,#f093fb 0%,#f5576c 100%)',
+  'linear-gradient(135deg,#4facfe 0%,#00f2fe 100%)',
+  'linear-gradient(135deg,#43e97b 0%,#38f9d7 100%)',
+  'linear-gradient(135deg,#fa709a 0%,#fee140 100%)',
+  'linear-gradient(135deg,#a18cd1 0%,#fbc2eb 100%)',
+  'linear-gradient(135deg,#fccb90 0%,#d57eeb 100%)',
+  'linear-gradient(135deg,#e0c3fc 0%,#8ec5fc 100%)',
+  'linear-gradient(135deg,#f5576c 0%,#ff9a9e 100%)',
+  'linear-gradient(135deg,#667eea 0%,#00f2fe 100%)',
+  'linear-gradient(135deg,#ff9a9e 0%,#fad0c4 100%)',
+  'linear-gradient(135deg,#a1c4fd 0%,#c2e9fb 100%)',
+  'linear-gradient(135deg,#fddb92 0%,#d1fdff 100%)',
+  'linear-gradient(135deg,#9890e3 0%,#b1f4cf 100%)',
+  'linear-gradient(135deg,#ebc0fd 0%,#d9ded8 100%)',
+  'linear-gradient(135deg,#f6d365 0%,#fda085 100%)',
+];
+let profilePwVisible = false;
+
+function openProfile() {
+  const modal = document.getElementById('profileModal');
+  modal.style.display = 'flex';
+  // Random background every time
+  const bg = PROFILE_BGS[Math.floor(Math.random() * PROFILE_BGS.length)];
+  document.getElementById('profileBg').style.background = bg;
+  // Fill info
+  document.getElementById('profileName').textContent = currentUser;
+  document.getElementById('profileUsername').textContent = currentUser;
+  // Get password
+  const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
+  profilePwVisible = false;
+  document.getElementById('profilePassword').textContent = '••••••';
+  document.getElementById('profileShowPwBtn').textContent = 'Show';
+  // Game stats
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const myGames = games.filter(g => g.author === currentUser);
+  const publicGames = myGames.filter(g => g.visibility === 'public');
+  document.getElementById('profileGameCount').textContent = myGames.length;
+  document.getElementById('profilePublicCount').textContent = publicGames.length;
+  // Draw player preview
+  drawProfilePlayer();
+}
+
+function drawProfilePlayer() {
+  const c = document.getElementById('profilePlayerCanvas');
+  const ctx2 = c.getContext('2d');
+  ctx2.clearRect(0, 0, 120, 120);
+  // Small stage background
+  const bg = PROFILE_BGS[Math.floor(Math.random() * PROFILE_BGS.length)];
+  const grd = ctx2.createLinearGradient(0, 0, 120, 120);
+  grd.addColorStop(0, 'rgba(30,30,50,0.8)');
+  grd.addColorStop(1, 'rgba(20,20,40,0.9)');
+  ctx2.fillStyle = grd;
+  ctx2.fillRect(0, 0, 120, 120);
+  // Ground
+  ctx2.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx2.fillRect(0, 95, 120, 25);
+  // Draw the player character centered
+  drawPlayerOnCtx(ctx2, 36, 58, 1, 0, true, 24, 36);
+  // Name underneath
+  ctx2.fillStyle = '#fff';
+  ctx2.font = 'bold 10px Segoe UI,sans-serif';
+  ctx2.textAlign = 'center';
+  ctx2.fillText(currentUser, 60, 112);
+  ctx2.textAlign = 'left';
+}
+
+function toggleProfilePassword() {
+  profilePwVisible = !profilePwVisible;
+  const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
+  const pw = accounts[currentUser] || '';
+  document.getElementById('profilePassword').textContent = profilePwVisible ? pw : '••••••';
+  document.getElementById('profileShowPwBtn').textContent = profilePwVisible ? 'Hide' : 'Show';
+}
+
+function closeProfile() {
+  document.getElementById('profileModal').style.display = 'none';
 }
 
 function logout() {
