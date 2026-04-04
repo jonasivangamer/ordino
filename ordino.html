@@ -1443,12 +1443,18 @@ function runGameBlocks(dt) {
 
     // Check if player is touching this sprite
     let touching = false;
-    if (s._x && !s.isSpawn) {
+    if (s._x != null && !s.isSpawn) {
       const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
+      const hw = s.hitbox.w, hh = s.hitbox.h;
       const oxx = s.hitbox.ox || 0, oyy = s.hitbox.oy || 0;
-      const sl = s._x - rw/2 + oxx, st = s._y - rh + oyy;
-      touching = player.x + player.w > sl && player.x < sl + s.hitbox.w &&
-                 player.y + player.h > st && player.y < st + s.hitbox.h;
+      let sl, st, tw, th;
+      if (s.isGround) {
+        sl = 0; st = s._y - rh + oyy; tw = gameCanvas.width; th = hh;
+      } else {
+        sl = s._x - rw/2 + oxx; st = s._y - rh + oyy; tw = hw; th = hh;
+      }
+      touching = player.x + player.w > sl && player.x < sl + tw &&
+                 player.y + player.h >= st && player.y <= st + th;
     }
 
     const { chains, chainState } = gbState[idx];
