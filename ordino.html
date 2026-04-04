@@ -995,7 +995,13 @@ function playCloudGame(idx) {
   document.getElementById('backToBrowseBtn').style.display = 'block';
   showMobileControls();
   showChat();
-  mpShowOverlay();
+  if (g.multiplayer) {
+    mpShowOverlay();
+  } else {
+    initWorld();
+    lastTime = performance.now();
+    gameAF = requestAnimationFrame(gameLoop);
+  }
 }
 
 function deleteGame(idx) {
@@ -1146,7 +1152,13 @@ function playGame(idx) {
   document.getElementById('backToBrowseBtn').style.display = 'block';
   showMobileControls();
   showChat();
-  mpShowOverlay();
+  if (g.multiplayer) {
+    mpShowOverlay();
+  } else {
+    initWorld();
+    lastTime = performance.now();
+    gameAF = requestAnimationFrame(gameLoop);
+  }
 }
 
 function backToBrowse() {
@@ -1461,7 +1473,7 @@ function runGameBlocks(dt) {
 
         if (shouldStart) {
           cs.active = true;
-          cs.pc = (head.id === 'flag' || head.id === 'key_press' || head.id === 'touch_trigger') ? 1 : 0;
+          cs.pc = (head.id === 'flag' || head.id === 'key_press' || head.id === 'touch_trigger' || head.id === 'player_join' || head.id === 'players_join') ? 1 : 0;
           cs.waitUntil = 0;
           cs.repeatCount = 0;
         }
@@ -1559,6 +1571,12 @@ function runGameBlocks(dt) {
             else if (v.sound === 'boom') playBoom();
             else playTone(600, 0.12, 'sine');
             cs.pc++; break;
+
+          case 'set_volume': {
+            const vol = Math.max(0, Math.min(100, val('vol', 100)));
+            sfxVolume = vol / 100;
+            cs.pc++; break;
+          }
 
           // Interact
           case 'touch_set_player':
@@ -2001,13 +2019,14 @@ function drawPlayer(x,y,dir,frame,onGround) {
 //  AUDIO
 // ════════════════════════════════════════════════════════
 let audioCtx;
+let sfxVolume = 1; // 0-1 range, controlled by set_volume block
 function getAudio() { if(!audioCtx) audioCtx=new(window.AudioContext||window.webkitAudioContext)(); return audioCtx; }
 function playTone(freq,dur,type='sine') {
   if(!sfxOn) return;
-  try { const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain(); o.connect(g);g.connect(ac.destination); o.frequency.value=freq;o.type=type; g.gain.setValueAtTime(0.2,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur); o.start();o.stop(ac.currentTime+dur); } catch(e){}
+  try { const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain(); o.connect(g);g.connect(ac.destination); o.frequency.value=freq;o.type=type; g.gain.setValueAtTime(0.2*sfxVolume,ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+dur); o.start();o.stop(ac.currentTime+dur); } catch(e){}
 }
-function playBoing() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(200,ac.currentTime);o.frequency.exponentialRampToValueAtTime(600,ac.currentTime+0.15);g.gain.setValueAtTime(0.3,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.start();o.stop(ac.currentTime+0.2);}catch(e){} }
-function playBoom() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(150,ac.currentTime);o.frequency.exponentialRampToValueAtTime(30,ac.currentTime+0.3);g.gain.setValueAtTime(0.5,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.3);o.type='sawtooth';o.start();o.stop(ac.currentTime+0.3);}catch(e){} }
+function playBoing() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(200,ac.currentTime);o.frequency.exponentialRampToValueAtTime(600,ac.currentTime+0.15);g.gain.setValueAtTime(0.3*sfxVolume,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.2);o.start();o.stop(ac.currentTime+0.2);}catch(e){} }
+function playBoom() { try{const ac=getAudio(),o=ac.createOscillator(),g=ac.createGain();o.connect(g);g.connect(ac.destination);o.frequency.setValueAtTime(150,ac.currentTime);o.frequency.exponentialRampToValueAtTime(30,ac.currentTime+0.3);g.gain.setValueAtTime(0.5*sfxVolume,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.3);o.type='sawtooth';o.start();o.stop(ac.currentTime+0.3);}catch(e){} }
 
 // ════════════════════════════════════════════════════════
 //  CHAT
