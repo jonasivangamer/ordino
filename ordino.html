@@ -372,28 +372,21 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
         <span style="color:rgba(255,255,255,.5);font-size:.78rem">👤 Username</span>
         <span id="profileUsername" style="color:#fff;font-size:.88rem;font-weight:600"></span>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="color:rgba(255,255,255,.5);font-size:.78rem">🔑 Password</span>
-        <span style="display:flex;align-items:center;gap:6px">
-          <span id="profilePassword" style="color:#fff;font-size:.88rem;font-weight:600;letter-spacing:.1em">••••••</span>
-          <button id="profileShowPwBtn" onclick="toggleProfilePassword()" style="background:rgba(255,255,255,.1);border:none;border-radius:6px;padding:4px 8px;color:rgba(255,255,255,.6);font-size:.72rem;cursor:pointer">Show</button>
-        </span>
-      </div>
-      <div id="profileChangePwRow" style="margin-top:10px">
-        <div id="profileChangePwForm" style="display:none">
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
-            <input type="password" id="profileNewPw" placeholder="New password" style="flex:1;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;color:#fff;font-size:.82rem;outline:none">
-            <label style="color:rgba(255,255,255,.4);font-size:.68rem;white-space:nowrap">Len:</label>
-            <input type="number" id="profilePwLen" min="4" max="64" value="12" style="width:46px;padding:5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;color:#fff;font-size:.78rem;text-align:center;outline:none">
-            <button onclick="profileGenPw()" style="padding:5px 8px;background:rgba(255,255,255,.1);border:none;border-radius:6px;color:rgba(255,255,255,.6);font-size:.9rem;cursor:pointer" title="Generate">🎲</button>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button onclick="profileSavePassword()" style="flex:1;padding:7px;background:rgba(76,175,80,.3);border:1px solid rgba(76,175,80,.5);border-radius:6px;color:#66bb6a;font-weight:600;font-size:.78rem;cursor:pointer">✓ Save</button>
-            <button onclick="document.getElementById('profileChangePwForm').style.display='none'" style="flex:1;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:rgba(255,255,255,.5);font-weight:600;font-size:.78rem;cursor:pointer">Cancel</button>
-          </div>
+      <div style="color:rgba(255,255,255,.5);font-size:.78rem;margin-bottom:6px">🔑 Passwords</div>
+      <div id="profilePasswordList"></div>
+      <div id="profileAddPwForm" style="display:none;margin-top:8px">
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+          <input type="password" id="profileNewPw" placeholder="New password" style="flex:1;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;color:#fff;font-size:.82rem;outline:none">
+          <label style="color:rgba(255,255,255,.4);font-size:.68rem;white-space:nowrap">Len:</label>
+          <input type="number" id="profilePwLen" min="4" max="64" value="12" style="width:46px;padding:5px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:6px;color:#fff;font-size:.78rem;text-align:center;outline:none">
+          <button onclick="profileGenPw()" style="padding:5px 8px;background:rgba(255,255,255,.1);border:none;border-radius:6px;color:rgba(255,255,255,.6);font-size:.9rem;cursor:pointer" title="Generate">🎲</button>
         </div>
-        <button id="profileChangePwBtn" onclick="document.getElementById('profileChangePwForm').style.display='block';this.style.display='none'" style="width:100%;padding:7px;background:rgba(255,140,0,.15);border:1px solid rgba(255,140,0,.3);border-radius:6px;color:#ff8c00;font-weight:600;font-size:.78rem;cursor:pointer">🔑 Change Password</button>
+        <div style="display:flex;gap:6px">
+          <button onclick="profileAddPassword()" style="flex:1;padding:7px;background:rgba(76,175,80,.3);border:1px solid rgba(76,175,80,.5);border-radius:6px;color:#66bb6a;font-weight:600;font-size:.78rem;cursor:pointer">+ Add</button>
+          <button onclick="document.getElementById('profileAddPwForm').style.display='none'" style="flex:1;padding:7px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:6px;color:rgba(255,255,255,.5);font-weight:600;font-size:.78rem;cursor:pointer">Cancel</button>
+        </div>
       </div>
+      <button id="profileAddPwBtn" onclick="document.getElementById('profileAddPwForm').style.display='block';this.style.display='none'" style="width:100%;padding:7px;margin-top:8px;background:rgba(255,140,0,.15);border:1px solid rgba(255,140,0,.3);border-radius:6px;color:#ff8c00;font-weight:600;font-size:.78rem;cursor:pointer">+ Add Another Password</button>
     </div>
     <div id="profileStats" style="display:flex;gap:8px;margin-bottom:16px">
       <div style="flex:1;background:rgba(255,255,255,.05);border-radius:8px;padding:10px 6px">
@@ -662,13 +655,18 @@ function doAuth(mode) {
 
     if (mode === 'register') {
       if (accounts[username]) { setAuthError('That username is already taken. Try a different one.'); return; }
-      accounts[username] = password;
+      accounts[username] = [password]; // store as array of passwords
       localStorage.setItem('bw_accounts', JSON.stringify(accounts));
     } else {
-      if (!accounts[username] || accounts[username] !== password) {
+      const stored = accounts[username];
+      // Support old format (string) and new format (array)
+      const pwList = Array.isArray(stored) ? stored : (stored ? [stored] : []);
+      if (!stored || !pwList.includes(password)) {
         setAuthError('Wrong username or password. Use "Create Account" to register.');
         return;
       }
+      // Migrate old string format to array
+      if (!Array.isArray(stored)) { accounts[username] = pwList; localStorage.setItem('bw_accounts', JSON.stringify(accounts)); }
     }
 
     currentUser = username;
@@ -712,11 +710,10 @@ function openProfile() {
   document.getElementById('profileUsername').textContent = currentUser;
   // Get password
   const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
-  profilePwVisible = false;
-  document.getElementById('profilePassword').textContent = '••••••';
-  document.getElementById('profileShowPwBtn').textContent = 'Show';
-  document.getElementById('profileChangePwForm').style.display = 'none';
-  document.getElementById('profileChangePwBtn').style.display = 'block';
+  profilePwVisible = {};
+  renderProfilePasswords();
+  document.getElementById('profileAddPwForm').style.display = 'none';
+  document.getElementById('profileAddPwBtn').style.display = 'block';
   document.getElementById('profileNewPw').value = '';
   // Game stats
   const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
@@ -752,12 +749,44 @@ function drawProfilePlayer() {
   ctx2.textAlign = 'left';
 }
 
-function toggleProfilePassword() {
-  profilePwVisible = !profilePwVisible;
+function getAccountPasswords() {
   const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
-  const pw = accounts[currentUser] || '';
-  document.getElementById('profilePassword').textContent = profilePwVisible ? pw : '••••••';
-  document.getElementById('profileShowPwBtn').textContent = profilePwVisible ? 'Hide' : 'Show';
+  const stored = accounts[currentUser];
+  return Array.isArray(stored) ? stored : (stored ? [stored] : []);
+}
+
+function renderProfilePasswords() {
+  const pwList = getAccountPasswords();
+  const container = document.getElementById('profilePasswordList');
+  container.innerHTML = pwList.map((pw, i) => {
+    const shown = profilePwVisible[i];
+    const display = shown ? escHtml(pw) : '••••••';
+    const canDelete = pwList.length > 1;
+    return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:6px">
+      <span style="color:rgba(255,255,255,.35);font-size:.7rem;min-width:18px">#${i+1}</span>
+      <span style="flex:1;color:#fff;font-size:.82rem;font-weight:600;letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${display}</span>
+      <button onclick="togglePw(${i})" style="background:rgba(255,255,255,.1);border:none;border-radius:5px;padding:3px 7px;color:rgba(255,255,255,.6);font-size:.68rem;cursor:pointer">${shown ? 'Hide' : 'Show'}</button>
+      ${canDelete ? `<button onclick="deleteProfilePw(${i})" style="background:rgba(244,67,54,.2);border:none;border-radius:5px;padding:3px 7px;color:#ef5350;font-size:.68rem;cursor:pointer">✕</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function togglePw(i) {
+  profilePwVisible[i] = !profilePwVisible[i];
+  renderProfilePasswords();
+}
+
+function deleteProfilePw(i) {
+  const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
+  const pwList = Array.isArray(accounts[currentUser]) ? accounts[currentUser] : [accounts[currentUser]];
+  if (pwList.length <= 1) { showToast('⚠️ You need at least one password'); return; }
+  if (!confirm('Delete password #' + (i+1) + '? You won\'t be able to log in with it anymore.')) return;
+  pwList.splice(i, 1);
+  accounts[currentUser] = pwList;
+  localStorage.setItem('bw_accounts', JSON.stringify(accounts));
+  delete profilePwVisible[i];
+  renderProfilePasswords();
+  showToast('🗑️ Password removed');
 }
 
 function profileGenPw() {
@@ -771,25 +800,26 @@ function profileGenPw() {
   setTimeout(() => { inp.type = 'password'; }, 5000);
 }
 
-function profileSavePassword() {
+function profileAddPassword() {
   const newPw = document.getElementById('profileNewPw').value;
-  if (!newPw || newPw.length < 1) { showToast('⚠️ Enter a new password'); return; }
+  if (!newPw || newPw.length < 1) { showToast('⚠️ Enter a password'); return; }
   const accounts = JSON.parse(localStorage.getItem('bw_accounts') || '{}');
-  accounts[currentUser] = newPw;
+  let pwList = Array.isArray(accounts[currentUser]) ? accounts[currentUser] : (accounts[currentUser] ? [accounts[currentUser]] : []);
+  if (pwList.includes(newPw)) { showToast('⚠️ That password already exists'); return; }
+  pwList.push(newPw);
+  accounts[currentUser] = pwList;
   localStorage.setItem('bw_accounts', JSON.stringify(accounts));
-  document.getElementById('profileChangePwForm').style.display = 'none';
-  document.getElementById('profileChangePwBtn').style.display = 'block';
-  profilePwVisible = false;
-  document.getElementById('profilePassword').textContent = '••••••';
-  document.getElementById('profileShowPwBtn').textContent = 'Show';
+  document.getElementById('profileAddPwForm').style.display = 'none';
+  document.getElementById('profileAddPwBtn').style.display = 'block';
   document.getElementById('profileNewPw').value = '';
-  showToast('✅ Password changed!');
+  renderProfilePasswords();
+  showToast('✅ Password added! You now have ' + pwList.length + ' passwords.');
 }
 
 function closeProfile() {
   document.getElementById('profileModal').style.display = 'none';
-  document.getElementById('profileChangePwForm').style.display = 'none';
-  document.getElementById('profileChangePwBtn').style.display = 'block';
+  document.getElementById('profileAddPwForm').style.display = 'none';
+  document.getElementById('profileAddPwBtn').style.display = 'block';
 }
 
 function logout() {
