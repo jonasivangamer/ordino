@@ -917,6 +917,32 @@ function renderGamesGrid() {
       grid.appendChild(makeGameCard(g, idx, 'local'));
     });
   }
+
+  // Recently Deleted section (only your own, auto-cleaned)
+  const trash = cleanTrash().filter(g => g.author === currentUser);
+  if (trash.length > 0) {
+    const secTrash = document.createElement('div');
+    secTrash.innerHTML = '<div class="browse-section-title" style="margin:18px 0 4px;font-size:.85rem;color:rgba(255,100,100,.5)">🗑️ Recently Deleted</div><div style="color:rgba(255,255,255,.25);font-size:.7rem;margin-bottom:10px">Games here are permanently deleted after 30 days</div>';
+    grid.appendChild(secTrash);
+    trash.forEach((g, ti) => {
+      const card = document.createElement('div');
+      card.className = 'game-card';
+      card.style.opacity = '0.55';
+      const daysLeft = Math.max(1, Math.ceil((30 * 24 * 60 * 60 * 1000 - (Date.now() - (g._deletedAt || 0))) / (24*60*60*1000)));
+      const bg = THUMB_COLORS[ti % THUMB_COLORS.length];
+      card.innerHTML = `
+        <div class="game-card-thumb" style="background:${bg};filter:grayscale(.6)">🗑️</div>
+        <div class="game-card-body">
+          <div class="game-card-name" style="text-decoration:line-through;opacity:.7">${escHtml(g.name)}</div>
+          <div class="game-card-author" style="color:rgba(255,100,100,.5)">${daysLeft} day${daysLeft!==1?'s':''} left</div>
+          <div class="game-card-actions">
+            <button class="card-btn card-btn-play" onclick="restoreGame(${ti})" style="background:rgba(76,175,80,.3);color:#66bb6a">♻️ Restore</button>
+            <button class="card-btn card-btn-delete" onclick="permanentDeleteGame(${ti})">💀 Delete Forever</button>
+          </div>
+        </div>`;
+      grid.appendChild(card);
+    });
+  }
 }
 
 function makeGameCard(g, idx, source) {
@@ -975,10 +1001,53 @@ function playCloudGame(idx) {
 function deleteGame(idx) {
   const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
   const g = games[idx];
-  if (!g || g.author !== currentUser) return; // safety check — can only delete your own
-  if (!confirm(`Delete "${g.name}"? This cannot be undone.`)) return;
+  if (!g || g.author !== currentUser) return;
+  if (!confirm(`Delete "${g.name}"? It will move to Recently Deleted for 30 days.`)) return;
+  // Move to trash
+  const trash = JSON.parse(localStorage.getItem('bw_trash') || '[]');
+  g._deletedAt = Date.now();
+  trash.push(g);
+  localStorage.setItem('bw_trash', JSON.stringify(trash));
+  // Remove from games
   games.splice(idx, 1);
   localStorage.setItem('bw_games', JSON.stringify(games));
+  showToast('🗑️ Moved to Recently Deleted');
+  renderGamesGrid();
+}
+
+// Clean up trash older than 30 days
+function cleanTrash() {
+  const trash = JSON.parse(localStorage.getItem('bw_trash') || '[]');
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const kept = trash.filter(g => now - (g._deletedAt || 0) < thirtyDays);
+  if (kept.length !== trash.length) localStorage.setItem('bw_trash', JSON.stringify(kept));
+  return kept;
+}
+
+function restoreGame(trashIdx) {
+  const trash = JSON.parse(localStorage.getItem('bw_trash') || '[]');
+  const g = trash[trashIdx];
+  if (!g) return;
+  // Remove trash metadata and restore
+  delete g._deletedAt;
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  games.push(g);
+  localStorage.setItem('bw_games', JSON.stringify(games));
+  trash.splice(trashIdx, 1);
+  localStorage.setItem('bw_trash', JSON.stringify(trash));
+  showToast('✅ Restored: ' + (g.name || 'Game'));
+  renderGamesGrid();
+}
+
+function permanentDeleteGame(trashIdx) {
+  const trash = JSON.parse(localStorage.getItem('bw_trash') || '[]');
+  const g = trash[trashIdx];
+  if (!g) return;
+  if (!confirm(`Permanently delete "${g.name}"? This cannot be undone.`)) return;
+  trash.splice(trashIdx, 1);
+  localStorage.setItem('bw_trash', JSON.stringify(trash));
+  showToast('💀 Permanently deleted');
   renderGamesGrid();
 }
 
