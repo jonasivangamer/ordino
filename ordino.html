@@ -1441,20 +1441,22 @@ function runGameBlocks(dt) {
     const s = sprites[si];
     if (!s || !s.visible) continue;
 
-    // Check if player is touching this sprite
+    // Check if player is touching this sprite (with 3px margin so it detects
+    // even after physics pushes the player out of the sprite)
     let touching = false;
     if (s._x != null && !s.isSpawn) {
       const rw = s.hitbox.rw || s.hitbox.w, rh = s.hitbox.rh || s.hitbox.h;
       const hw = s.hitbox.w, hh = s.hitbox.h;
       const oxx = s.hitbox.ox || 0, oyy = s.hitbox.oy || 0;
+      const M = 3; // margin pixels
       let sl, st, tw, th;
       if (s.isGround) {
         sl = 0; st = s._y - rh + oyy; tw = gameCanvas.width; th = hh;
       } else {
         sl = s._x - rw/2 + oxx; st = s._y - rh + oyy; tw = hw; th = hh;
       }
-      touching = player.x + player.w > sl && player.x < sl + tw &&
-                 player.y + player.h >= st && player.y <= st + th;
+      touching = player.x + player.w > sl - M && player.x < sl + tw + M &&
+                 player.y + player.h >= st - M && player.y <= st + th + M;
     }
 
     const { chains, chainState } = gbState[idx];
@@ -1729,6 +1731,10 @@ function gameLoop(ts) {
       if (player.x+player.w > sx && player.x < sx+sw) {
         if (player.vy > 0.5 && player.y+player.h > sy && player.y+player.h < sy+sh+20) {
           player.y = sy - player.h; player.vy = 0; player.onGround = true;
+        }
+        // Hit bottom — player jumping into underside of sprite
+        if (player.vy < 0 && player.y < sy+sh && player.y > sy && player.y+player.h > sy+sh) {
+          player.y = sy + sh; player.vy = 0;
         }
       }
 
