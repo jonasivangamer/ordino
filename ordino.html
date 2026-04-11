@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Ordino</title>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
 <style>
@@ -2083,13 +2082,9 @@ function sendChat(text) {
   renderChat();
   // Speech bubble on player
   player.bubble = { text: text.slice(0, 42), frames: 210 };
-  // Send over network
-  if(mpActive) {
-    if(mpIsHost) {
-      mpBroadcast({ type: 'chat', name: currentUser, text });
-    } else {
-      mpConns.forEach(c => { try { c.send({ type: 'chat', name: currentUser, text }); } catch(e){} });
-    }
+  // Send over Gun.js network
+  if(mpRoomId && mpRoomNode) {
+    mpWriteChatMessage(text);
   }
 }
 
@@ -2140,12 +2135,25 @@ function hideChat() {
 }
 
 // ════════════════════════════════════════════════════════
-//  MULTIPLAYER (PeerJS WebRTC)
+//  MULTIPLAYER (Gun.js-based — reliable, no WebRTC/PeerJS)
 // ════════════════════════════════════════════════════════
-let mpPeer = null, mpConns = [], mpIsHost = false, mpRoomId = '', mpActive = false;
+// Architecture: each room is a Gun node with:
+//   ordino-mp-rooms/{code}/host = {name, ts}
+//   ordino-mp-rooms/{code}/started = boolean
+//   ordino-mp-rooms/{code}/players/{name} = {x,y,dir,frame,onGround,bubble,ts}
+//   ordino-mp-rooms/{code}/chat/{msgId} = {name,text,ts}
+//   ordino-mp-rooms/{code}/sprites = {spritesJSON, ts}
+let mpPeer = null; // unused, kept for compat
+let mpConns = []; // unused
+let mpIsHost = false, mpRoomId = '', mpActive = false;
 let mpRoomType = 'public'; // 'public' or 'private'
-const mpRoomsDB = gun.get('ordino-public-rooms-v2');
-let remotePlayers = {};  // { odeName: { x, y, dir, frame, onGround, name, bubble } }
+let mpRoomNode = null; // Gun node for current room
+let mpSubscribed = false;
+let mpLastChatId = '';
+let mpPlayerList = []; // [{name, lastSeen}]
+const mpRoomsDB = gun.get('ordino-mp-rooms-v3');
+const mpPublicListDB = gun.get('ordino-mp-public-v3'); // list of public rooms
+let remotePlayers = {};  // { name: { x, y, dir, frame, onGround, name, bubble } }
 const MP_COLORS = ['#ff8c00','#2196f3','#e91e63','#00bcd4','#9c27b0','#ff5722','#009688','#673ab7','#cddc39','#f44336',
   '#3f51b5','#8bc34a','#ffc107','#607d8b','#e040fb','#00e676','#ff6e40','#448aff','#eeff41','#69f0ae',
   '#ea80fc','#b2ff59','#ffd740','#40c4ff','#ff4081','#7c4dff','#18ffff','#76ff03','#ffab40','#536dfe'];
@@ -2213,14 +2221,14 @@ function mpSetRoomType(type) {
 }
 
 function mpRegisterPublicRoom() {
-  if(mpRoomType === 'public' && mpRoomId) {
+  if(mpRoomType === 'public' && mpRoomId && mpIsHost) {
     const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
     const g = games[currentGameIdx] || {};
-    mpRoomsDB.get(mpRoomId).put({
+    mpPublicListDB.get(mpRoomId).put({
       code: mpRoomId,
       host: currentUser,
       gameName: g.name || 'Unknown',
-      players: 1 + mpConns.length,
+      players: mpPlayerList.length || 1,
       ts: Date.now(),
       active: true
     });
@@ -2228,8 +2236,11 @@ function mpRegisterPublicRoom() {
 }
 
 function mpUnregisterRoom() {
-  if(mpRoomId) {
-    mpRoomsDB.get(mpRoomId).put({ active: false });
+  if(mpRoomId && mpIsHost) {
+    mpPublicListDB.get(mpRoomId).put({ active: false });
+    if(mpRoomNode) {
+      try { mpRoomNode.get('host').put({ active: false, ts: Date.now() }); } catch(e){}
+    }
   }
 }
 
@@ -2239,79 +2250,36 @@ function mpPlaySolo() {
   mpActualStartGame();
 }
 
-const PEERJS_CONFIG = {
-  host: '0.peerjs.com',
-  port: 443,
-  secure: true,
-  debug: 1,
-  config: {
-    iceServers: [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:global.stun.twilio.com:3478' },
-    ]
-  }
-};
-
 function mpHostRoom() {
-  // Clean up any previous peer first
-  if(mpPeer) { try { mpPeer.destroy(); } catch(e){} mpPeer = null; }
-  mpConns = [];
+  // Clean up any previous room
+  mpCleanupRoomSubs();
   mpIsHost = true;
   mpRoomId = mpGenRoomId();
   document.getElementById('mpStatus').textContent = 'Setting up room…';
-  const prefix = 'ordino-' + mpRoomId.toLowerCase();
-  mpPeer = new Peer(prefix, PEERJS_CONFIG);
-  let hostOpenFired = false;
-  mpPeer.on('open', (id) => {
-    hostOpenFired = true;
-    document.getElementById('mpRoomCode').textContent = mpRoomId;
-    document.getElementById('mpStatus').textContent = 'Room ready! Waiting for players…';
-    document.getElementById('mpPlayerCount').textContent = 'Players: 1';
-    mpRegisterPublicRoom();
-  });
-  mpPeer.on('connection', conn => {
-    conn.on('open', () => {
-      mpConns.push(conn);
-      mpUpdatePlayerCount();
-      conn.on('data', data => mpHostHandleData(conn, data));
-      conn.on('close', () => {
-        mpConns = mpConns.filter(c => c !== conn);
-        if(conn._mpName) { delete remotePlayers[conn._mpName]; mpBroadcastPlayerList(); }
-        mpUpdatePlayerCount();
-      });
-    });
-  });
-  mpPeer.on('error', err => {
-    console.error('Peer error (host):', err.type, err);
-    // If ID is taken (stale peer), try a new ID
-    if(err.type === 'unavailable-id' && !hostOpenFired) {
-      document.getElementById('mpStatus').textContent = 'Trying again…';
-      setTimeout(() => mpHostRoom(), 500);
-      return;
-    }
-    document.getElementById('mpStatus').textContent = '⚠️ ' + (err.type || 'error');
-  });
-  // Fallback: if open doesn't fire in 10s, show error
-  setTimeout(() => {
-    if(!hostOpenFired) {
-      document.getElementById('mpStatus').textContent = '⚠️ Connection timeout. Try again.';
-    }
-  }, 10000);
+  document.getElementById('mpRoomCode').textContent = mpRoomId;
+  mpRoomNode = mpRoomsDB.get(mpRoomId);
+  // Write host info
+  mpRoomNode.get('host').put({ name: currentUser, ts: Date.now(), active: true });
+  mpRoomNode.get('started').put({ value: false, ts: Date.now() });
+  document.getElementById('mpStatus').textContent = 'Room ready! Waiting for players…';
+  document.getElementById('mpPlayerCount').textContent = 'Players: 1';
+  mpPlayerList = [{ name: currentUser, lastSeen: Date.now() }];
+  mpRegisterPublicRoom();
+  mpSubscribeRoom();
+  // Host heartbeat — writes own player data so it shows up
+  mpWriteSelfPlayer();
 }
 
 function mpUpdatePlayerCount() {
-  const n = 1 + mpConns.length;
-  document.getElementById('mpPlayerCount').textContent = 'Players: ' + n;
-  mpBroadcastPlayerList();
-  mpRegisterPublicRoom(); // update player count in listing
+  const n = Math.max(1, mpPlayerList.length);
+  const el = document.getElementById('mpPlayerCount');
+  if(el) el.textContent = 'Players: ' + n;
+  const badge = document.getElementById('mpPlayersBadge');
+  if(badge && mpActive) { badge.textContent = '👥 ' + n + ' players'; badge.style.display = 'block'; }
 }
 
 function mpBroadcastPlayerList() {
-  const names = [currentUser, ...mpConns.map(c => c._mpName || '?')];
-  const badge = document.getElementById('mpPlayersBadge');
-  if(badge && mpActive) { badge.textContent = '👥 ' + names.length + ' players'; badge.style.display = 'block'; }
-  mpBroadcast({ type: 'players', names });
+  // No-op with Gun — players track themselves via their own writes
 }
 
 function copyRoomCode() {
@@ -2321,74 +2289,43 @@ function copyRoomCode() {
 function mpStartGame() {
   mpActive = true;
   document.getElementById('mpOverlay').style.display = 'none';
-  // Tell all clients to start
-  mpBroadcast({ type: 'start' });
+  // Tell all clients to start by flipping the 'started' flag
+  if(mpRoomNode) mpRoomNode.get('started').put({ value: true, ts: Date.now() });
   mpActualStartGame();
-  mpBroadcastPlayerList();
 }
 
 function mpJoinRoom() {
   const code = document.getElementById('mpJoinInput').value.trim().toUpperCase();
   if(!code || code.length < 4) { document.getElementById('mpJoinStatus').textContent = '⚠️ Enter a valid code'; return; }
-  // Clean up any previous peer first
-  if(mpPeer) { try { mpPeer.destroy(); } catch(e){} mpPeer = null; }
-  mpConns = [];
-  document.getElementById('mpJoinStatus').textContent = 'Connecting…';
+  mpCleanupRoomSubs();
+  document.getElementById('mpJoinStatus').textContent = 'Connecting to room…';
   mpIsHost = false;
   mpRoomId = code;
-  const prefix = 'ordino-' + code.toLowerCase();
-  mpPeer = new Peer(undefined, PEERJS_CONFIG);
-  let connOpened = false;
-  mpPeer.on('open', (myId) => {
-    console.log('Client peer opened, id:', myId, '- connecting to:', prefix);
-    const conn = mpPeer.connect(prefix, { reliable: true });
-    conn.on('open', () => {
-      connOpened = true;
-      mpConns = [conn];
-      conn.send({ type: 'join', name: currentUser });
-      document.getElementById('mpJoinStatus').textContent = '✓ Connected! Waiting for host to start…';
-      conn.on('data', data => mpClientHandleData(data));
-      conn.on('close', () => {
-        mpConns = [];
-        remotePlayers = {};
-        showToast('❌ Disconnected from host');
-        document.getElementById('mpPlayersBadge').style.display = 'none';
-      });
-    });
-    conn.on('error', (err) => {
-      console.error('Conn error:', err);
-      document.getElementById('mpJoinStatus').textContent = '⚠️ Could not connect. Check the code.';
-    });
-    // Timeout if conn never opens
-    setTimeout(() => {
-      if(!connOpened) {
-        document.getElementById('mpJoinStatus').textContent = '⚠️ Room not found or host offline';
-      }
-    }, 10000);
-  });
-  mpPeer.on('error', err => {
-    console.error('Peer error (join):', err.type, err);
-    let msg = err.type || 'error';
-    if(err.type === 'peer-unavailable') msg = 'Room not found — check the code';
-    else if(err.type === 'network' || err.type === 'server-error') msg = 'Network error — try again';
-    document.getElementById('mpJoinStatus').textContent = '⚠️ ' + msg;
-  });
-  // Overall timeout
-  setTimeout(() => {
-    if(!connOpened) {
-      const status = document.getElementById('mpJoinStatus');
-      if(status && !status.textContent.startsWith('✓')) {
-        status.textContent = '⚠️ Timeout — make sure host is online';
-      }
+  mpRoomNode = mpRoomsDB.get(code);
+  let hostFound = false;
+  // Look up host to verify room exists
+  mpRoomNode.get('host').once(function(data) {
+    if(data && data.name && data.active !== false) {
+      hostFound = true;
+      document.getElementById('mpJoinStatus').textContent = '✓ Connected to ' + data.name + '! Waiting for host to start…';
+      mpSubscribeRoom();
+      mpWriteSelfPlayer();
     }
-  }, 15000);
+  });
+  setTimeout(() => {
+    if(!hostFound) {
+      document.getElementById('mpJoinStatus').textContent = '⚠️ Room not found — check the code';
+      mpRoomId = '';
+      mpRoomNode = null;
+    }
+  }, 4000);
 }
 
 function mpJoinRandom() {
   document.getElementById('mpJoinStatus').textContent = '🔍 Searching for public rooms…';
   const rooms = [];
-  const cutoff = Date.now() - 120000; // rooms active in last 2 minutes
-  mpRoomsDB.map().once(function(data, key) {
+  const cutoff = Date.now() - 30000; // rooms active in last 30s
+  mpPublicListDB.map().once(function(data, key) {
     if(!data || !data.active || !data.code) return;
     if(data.ts && data.ts > cutoff && data.host !== currentUser) {
       rooms.push(data);
@@ -2408,7 +2345,142 @@ function mpJoinRandom() {
   }, 1500);
 }
 
-// Host receives data from clients
+// ── Gun.js subscription & messaging ──
+let mpPlayerWriteTimer = null;
+
+function mpCleanupRoomSubs() {
+  if(mpPlayerWriteTimer) { clearInterval(mpPlayerWriteTimer); mpPlayerWriteTimer = null; }
+  mpSubscribed = false;
+  remotePlayers = {};
+  mpPlayerList = [];
+}
+
+function mpSubscribeRoom() {
+  if(!mpRoomNode || mpSubscribed) return;
+  mpSubscribed = true;
+
+  // Subscribe to 'started' flag — clients react when host starts
+  mpRoomNode.get('started').on(function(data) {
+    if(!data) return;
+    if(data.value === true && !mpActive && !mpIsHost) {
+      mpActive = true;
+      document.getElementById('mpOverlay').style.display = 'none';
+      mpActualStartGame();
+    }
+  });
+
+  // Subscribe to host info — detect disconnects
+  if(!mpIsHost) {
+    mpRoomNode.get('host').on(function(data) {
+      if(!data) return;
+      if(data.active === false && mpActive) {
+        showToast('❌ Host left the room');
+        mpCleanup();
+        backToBrowse();
+      }
+    });
+  }
+
+  // Subscribe to player updates
+  mpRoomNode.get('players').map().on(function(data, key) {
+    if(!data || !data.name) return;
+    // Ignore stale (>5s old)
+    if(data.ts && Date.now() - data.ts > 8000) return;
+    if(data.name === currentUser) return; // Skip self
+    remotePlayers[data.name] = {
+      x: data.x || 0,
+      y: data.y || 0,
+      dir: data.dir || 1,
+      frame: data.frame || 0,
+      onGround: !!data.onGround,
+      name: data.name,
+      bubble: (data.bubbleText && data.bubbleFrames > 0) ?
+        { text: data.bubbleText, frames: data.bubbleFrames } : (remotePlayers[data.name] && remotePlayers[data.name].bubble)
+    };
+    // Track player list
+    const existing = mpPlayerList.find(p => p.name === data.name);
+    if(existing) existing.lastSeen = Date.now();
+    else mpPlayerList.push({ name: data.name, lastSeen: Date.now() });
+    mpUpdatePlayerCount();
+  });
+
+  // Subscribe to chat
+  mpRoomNode.get('chat').map().on(function(data, key) {
+    if(!data || !data.name || !data.text) return;
+    if(data.ts && Date.now() - data.ts > 10000) return;
+    // Only handle new messages
+    const msgKey = key + '_' + data.ts;
+    if(mpLastChatId === msgKey) return;
+    if(data.name === currentUser) return; // Don't re-receive own messages
+    mpLastChatId = msgKey;
+    mpReceiveChat(data.name, data.text);
+  });
+
+  // Subscribe to sprite sync (clients only)
+  if(!mpIsHost) {
+    mpRoomNode.get('sprites').on(function(data) {
+      if(!data || !data.spritesJSON) return;
+      try {
+        const ss = JSON.parse(data.spritesJSON);
+        for(let i = 0; i < ss.length && i < sprites.length; i++) {
+          const s = sprites[i], r = ss[i];
+          if(r._x !== undefined) s._x = r._x;
+          if(r._y !== undefined) s._y = r._y;
+          if(r.visible !== undefined) s.visible = r.visible;
+        }
+      } catch(e){}
+    });
+  }
+
+  // Start writing our own player position periodically
+  if(mpPlayerWriteTimer) clearInterval(mpPlayerWriteTimer);
+  mpPlayerWriteTimer = setInterval(() => {
+    // Clean stale players
+    const now = Date.now();
+    mpPlayerList = mpPlayerList.filter(p => now - p.lastSeen < 8000 || p.name === currentUser);
+    for(const name in remotePlayers) {
+      const rp = remotePlayers[name];
+      if(rp && rp._lastUpdate && now - rp._lastUpdate > 8000) delete remotePlayers[name];
+    }
+    mpWriteSelfPlayer();
+    if(mpIsHost && mpActive) mpWriteSpriteSync();
+    if(mpIsHost) mpRegisterPublicRoom();
+  }, 200);
+}
+
+function mpWriteSelfPlayer() {
+  if(!mpRoomNode) return;
+  const data = {
+    name: currentUser,
+    x: Math.round(player.x || 0),
+    y: Math.round(player.y || 0),
+    dir: player.dir || 1,
+    frame: player.frame || 0,
+    onGround: !!player.onGround,
+    bubbleText: (player.bubble && player.bubble.frames > 0) ? player.bubble.text : '',
+    bubbleFrames: (player.bubble && player.bubble.frames > 0) ? player.bubble.frames : 0,
+    ts: Date.now()
+  };
+  mpRoomNode.get('players').get(currentUser).put(data);
+}
+
+function mpWriteSpriteSync() {
+  if(!mpRoomNode) return;
+  const ss = sprites.map(s => ({
+    _x: Math.round(s._x || 0),
+    _y: Math.round(s._y || 0),
+    visible: s.visible !== false,
+  }));
+  mpRoomNode.get('sprites').put({ spritesJSON: JSON.stringify(ss), ts: Date.now() });
+}
+
+function mpWriteChatMessage(text) {
+  if(!mpRoomNode) return;
+  const id = currentUser + '_' + Date.now();
+  mpRoomNode.get('chat').get(id).put({ name: currentUser, text, ts: Date.now() });
+}
+
+// Host receives data from clients (legacy, not used with Gun)
 function mpHostHandleData(conn, data) {
   if(data.type === 'join') {
     conn._mpName = data.name;
@@ -2468,35 +2540,16 @@ function mpReceiveChat(name, text) {
 }
 
 function mpBroadcast(data) {
-  mpConns.forEach(c => { try { c.send(data); } catch(e){} });
+  // No-op — all data flows through Gun subscriptions
 }
 
-// Send local player position to peers (called from game loop)
+// Send local player position (called from game loop, actual writes are on 200ms timer)
 function mpSendPosition() {
-  if(!mpActive || mpConns.length === 0) return;
-  const data = {
-    type: mpIsHost ? 'hpos' : 'pos',
-    name: currentUser,
-    x: player.x, y: player.y,
-    dir: player.dir, frame: player.frame,
-    onGround: player.onGround,
-    bubble: player.bubble && player.bubble.frames > 0 ? { text: player.bubble.text, frames: player.bubble.frames } : null
-  };
-  mpConns.forEach(c => { try { c.send(data); } catch(e){} });
-  // Host syncs sprite state to all clients so the game looks the same for everyone
-  if(mpIsHost) mpSyncSpriteState();
+  // The 200ms interval in mpSubscribeRoom handles this — no-op here
 }
 
-let mpSpriteSync = 0;
 function mpSyncSpriteState() {
-  mpSpriteSync++;
-  if(mpSpriteSync % 2 !== 0) return; // send every other tick (~7.5/sec)
-  const ss = sprites.map(s => ({
-    _x: s._x, _y: s._y, _vx: s._vx, _vy: s._vy,
-    visible: s.visible, saying: s.saying || '', color: s.color,
-    sprW: s.sprW, sprH: s.sprH,
-  }));
-  mpBroadcast({ type: 'spriteSync', sprites: ss });
+  // Handled by 200ms interval
 }
 
 // Draw all remote players
@@ -2553,13 +2606,18 @@ function mpActualStartGame() {
 
 function mpCleanup() {
   mpUnregisterRoom();
+  // Remove self from room
+  if(mpRoomNode && currentUser) {
+    try { mpRoomNode.get('players').get(currentUser).put({ name: currentUser, ts: 0 }); } catch(e){}
+  }
+  mpCleanupRoomSubs();
   mpActive = false;
   remotePlayers = {};
-  if(mpPeer) { mpPeer.destroy(); mpPeer = null; }
-  mpConns = [];
   mpIsHost = false;
   mpRoomId = '';
-  document.getElementById('mpPlayersBadge').style.display = 'none';
+  mpRoomNode = null;
+  const badge = document.getElementById('mpPlayersBadge');
+  if(badge) badge.style.display = 'none';
 }
 
 let mpSendTimer = 0;
