@@ -1055,7 +1055,7 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // ════════════════════════════════════════════════════════
 //  CLOUD (Gun.js — decentralized game sharing)
 // ════════════════════════════════════════════════════════
-const gun = Gun(['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun']);
+const gun = Gun(['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun', 'https://peer.wallie.io/gun', 'https://plankton-app-6qfp3.ondigitalocean.app/']);
 const cloudDB = gun.get('ordino-public-games-v1');
 
 function cloudPublish(gameData) {
@@ -2381,46 +2381,49 @@ function mpSubscribeRoom() {
     });
   }
 
-  // Subscribe to player updates
+  // Subscribe to player updates (data is { j: JSON, t: ts })
   mpRoomNode.get('players').map().on(function(data, key) {
-    if(!data || !data.name) return;
-    if(data.ts && Date.now() - data.ts > 8000) return;
-    if(data.name === currentUser) return; // Skip self
-    const existing = remotePlayers[data.name];
-    const nx = data.x || 0, ny = data.y || 0;
+    if(!data || !data.j) return;
+    if(data.t && Date.now() - data.t > 8000) return;
+    let p;
+    try { p = JSON.parse(data.j); } catch(e) { return; }
+    if(!p || !p.n) return;
+    if(p.n === currentUser) return; // Skip self
+    const existing = remotePlayers[p.n];
+    const nx = p.x || 0, ny = p.y || 0;
+    // Drop out-of-order packets
+    if(existing && existing._seq && p.s && p.s < existing._seq) return;
     if(existing) {
-      // Set new target for interpolation; keep current render position
       existing.tx = nx;
       existing.ty = ny;
-      existing.dir = data.dir || 1;
-      existing.frame = data.frame || 0;
-      existing.onGround = !!data.onGround;
-      existing.name = data.name;
+      existing.dir = p.d || 1;
+      existing.frame = p.f || 0;
+      existing.onGround = !!p.g;
+      existing.name = p.n;
+      existing._seq = p.s || 0;
       existing._lastUpdate = Date.now();
       existing._lastPacketT = performance.now();
-      if(data.bubbleText && data.bubbleFrames > 0) {
-        existing.bubble = { text: data.bubbleText, frames: data.bubbleFrames };
+      if(p.bt && p.bf > 0) {
+        existing.bubble = { text: p.bt, frames: p.bf };
       }
     } else {
-      // First time seeing this player — snap to position
-      remotePlayers[data.name] = {
-        x: nx, y: ny,       // current render position
-        tx: nx, ty: ny,     // target position
-        px: nx, py: ny,     // previous target (for extrapolation)
-        dir: data.dir || 1,
-        frame: data.frame || 0,
-        onGround: !!data.onGround,
-        name: data.name,
+      remotePlayers[p.n] = {
+        x: nx, y: ny,
+        tx: nx, ty: ny,
+        px: nx, py: ny,
+        dir: p.d || 1,
+        frame: p.f || 0,
+        onGround: !!p.g,
+        name: p.n,
+        _seq: p.s || 0,
         _lastUpdate: Date.now(),
         _lastPacketT: performance.now(),
-        bubble: (data.bubbleText && data.bubbleFrames > 0) ?
-          { text: data.bubbleText, frames: data.bubbleFrames } : null
+        bubble: (p.bt && p.bf > 0) ? { text: p.bt, frames: p.bf } : null
       };
     }
-    // Track player list
-    const pexisting = mpPlayerList.find(p => p.name === data.name);
+    const pexisting = mpPlayerList.find(pp => pp.name === p.n);
     if(pexisting) pexisting.lastSeen = Date.now();
-    else mpPlayerList.push({ name: data.name, lastSeen: Date.now() });
+    else mpPlayerList.push({ name: p.n, lastSeen: Date.now() });
     mpUpdatePlayerCount();
   });
 
@@ -2473,20 +2476,24 @@ function mpSubscribeRoom() {
   }, 100);
 }
 
+let _mpWriteSeq = 0;
 function mpWriteSelfPlayer() {
   if(!mpRoomNode) return;
-  const data = {
-    name: currentUser,
-    x: Math.round(player.x || 0),
-    y: Math.round(player.y || 0),
-    dir: player.dir || 1,
-    frame: player.frame || 0,
-    onGround: !!player.onGround,
-    bubbleText: (player.bubble && player.bubble.frames > 0) ? player.bubble.text : '',
-    bubbleFrames: (player.bubble && player.bubble.frames > 0) ? player.bubble.frames : 0,
-    ts: Date.now()
+  _mpWriteSeq++;
+  // Pack into single JSON string so Gun treats each update as one atomic HAM op
+  const payload = {
+    n: currentUser,
+    x: Math.round((player.x || 0) * 10) / 10,
+    y: Math.round((player.y || 0) * 10) / 10,
+    d: player.dir || 1,
+    f: player.frame || 0,
+    g: !!player.onGround,
+    bt: (player.bubble && player.bubble.frames > 0) ? player.bubble.text : '',
+    bf: (player.bubble && player.bubble.frames > 0) ? player.bubble.frames : 0,
+    s: _mpWriteSeq,
+    t: Date.now()
   };
-  mpRoomNode.get('players').get(currentUser).put(data);
+  mpRoomNode.get('players').get(currentUser).put({ j: JSON.stringify(payload), t: Date.now() });
 }
 
 function mpWriteSpriteSync() {
