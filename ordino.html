@@ -2384,22 +2384,42 @@ function mpSubscribeRoom() {
   // Subscribe to player updates
   mpRoomNode.get('players').map().on(function(data, key) {
     if(!data || !data.name) return;
-    // Ignore stale (>5s old)
     if(data.ts && Date.now() - data.ts > 8000) return;
     if(data.name === currentUser) return; // Skip self
-    remotePlayers[data.name] = {
-      x: data.x || 0,
-      y: data.y || 0,
-      dir: data.dir || 1,
-      frame: data.frame || 0,
-      onGround: !!data.onGround,
-      name: data.name,
-      bubble: (data.bubbleText && data.bubbleFrames > 0) ?
-        { text: data.bubbleText, frames: data.bubbleFrames } : (remotePlayers[data.name] && remotePlayers[data.name].bubble)
-    };
+    const existing = remotePlayers[data.name];
+    const nx = data.x || 0, ny = data.y || 0;
+    if(existing) {
+      // Set new target for interpolation; keep current render position
+      existing.tx = nx;
+      existing.ty = ny;
+      existing.dir = data.dir || 1;
+      existing.frame = data.frame || 0;
+      existing.onGround = !!data.onGround;
+      existing.name = data.name;
+      existing._lastUpdate = Date.now();
+      existing._lastPacketT = performance.now();
+      if(data.bubbleText && data.bubbleFrames > 0) {
+        existing.bubble = { text: data.bubbleText, frames: data.bubbleFrames };
+      }
+    } else {
+      // First time seeing this player — snap to position
+      remotePlayers[data.name] = {
+        x: nx, y: ny,       // current render position
+        tx: nx, ty: ny,     // target position
+        px: nx, py: ny,     // previous target (for extrapolation)
+        dir: data.dir || 1,
+        frame: data.frame || 0,
+        onGround: !!data.onGround,
+        name: data.name,
+        _lastUpdate: Date.now(),
+        _lastPacketT: performance.now(),
+        bubble: (data.bubbleText && data.bubbleFrames > 0) ?
+          { text: data.bubbleText, frames: data.bubbleFrames } : null
+      };
+    }
     // Track player list
-    const existing = mpPlayerList.find(p => p.name === data.name);
-    if(existing) existing.lastSeen = Date.now();
+    const pexisting = mpPlayerList.find(p => p.name === data.name);
+    if(pexisting) pexisting.lastSeen = Date.now();
     else mpPlayerList.push({ name: data.name, lastSeen: Date.now() });
     mpUpdatePlayerCount();
   });
@@ -2432,9 +2452,11 @@ function mpSubscribeRoom() {
     });
   }
 
-  // Start writing our own player position periodically
+  // Start writing our own player position periodically (fast for smooth movement)
   if(mpPlayerWriteTimer) clearInterval(mpPlayerWriteTimer);
+  let _tick = 0;
   mpPlayerWriteTimer = setInterval(() => {
+    _tick++;
     // Clean stale players
     const now = Date.now();
     mpPlayerList = mpPlayerList.filter(p => now - p.lastSeen < 8000 || p.name === currentUser);
@@ -2443,9 +2465,12 @@ function mpSubscribeRoom() {
       if(rp && rp._lastUpdate && now - rp._lastUpdate > 8000) delete remotePlayers[name];
     }
     mpWriteSelfPlayer();
-    if(mpIsHost && mpActive) mpWriteSpriteSync();
-    if(mpIsHost) mpRegisterPublicRoom();
-  }, 200);
+    // Sprite sync + public room registration less frequently (every ~600ms)
+    if(_tick % 6 === 0) {
+      if(mpIsHost && mpActive) mpWriteSpriteSync();
+      if(mpIsHost) mpRegisterPublicRoom();
+    }
+  }, 100);
 }
 
 function mpWriteSelfPlayer() {
@@ -2557,6 +2582,20 @@ function drawRemotePlayers() {
   for (const name in remotePlayers) {
     const rp = remotePlayers[name];
     if(!rp) continue;
+    // Smooth interpolation toward target position
+    if(rp.tx !== undefined) {
+      const dx = rp.tx - rp.x;
+      const dy = rp.ty - rp.y;
+      // If target is very far away (teleport/respawn), snap immediately
+      if(Math.abs(dx) > 400 || Math.abs(dy) > 400) {
+        rp.x = rp.tx; rp.y = rp.ty;
+      } else {
+        rp.x += dx * 0.3;
+        rp.y += dy * 0.3;
+        if(Math.abs(dx) < 0.1) rp.x = rp.tx;
+        if(Math.abs(dy) < 0.1) rp.y = rp.ty;
+      }
+    }
     const col = mpGetColor(name);
     // Draw player body
     drawPlayerOnCtx(ctx, rp.x, rp.y, rp.dir, rp.frame, rp.onGround, player.w, player.h);
