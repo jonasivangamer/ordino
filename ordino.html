@@ -6,6 +6,10 @@
 <title>Ordino</title>
 <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+<!-- WebRTC transport: once two peers find each other via any relay, they
+     connect directly peer-to-peer so data stops bouncing through slow
+     public relay servers. Dramatically reduces multiplayer latency. -->
+<script src="https://cdn.jsdelivr.net/npm/gun/lib/webrtc.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#000;overflow:hidden;font-family:'Segoe UI',sans-serif}
@@ -1061,7 +1065,24 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 const gun = Gun({
   peers: ['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun', 'https://peer.wallie.io/gun', 'https://plankton-app-6qfp3.ondigitalocean.app/'],
   localStorage: false,
-  radisk: false
+  radisk: false,
+  rtc: {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' }
+    ]
+  }
+});
+// Log peer connections for debugging multiplayer latency
+let _gunPeerCount = 0;
+gun.on('hi', function(peer) {
+  _gunPeerCount++;
+  console.log('[Gun] peer connected:', peer && peer.url ? peer.url : 'webrtc-p2p', '| total:', _gunPeerCount);
+});
+gun.on('bye', function(peer) {
+  _gunPeerCount = Math.max(0, _gunPeerCount - 1);
+  console.log('[Gun] peer disconnected | total:', _gunPeerCount);
 });
 const cloudDB = gun.get('ordino-public-games-v1');
 
