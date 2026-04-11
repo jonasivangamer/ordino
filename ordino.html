@@ -1055,7 +1055,14 @@ function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 // ════════════════════════════════════════════════════════
 //  CLOUD (Gun.js — decentralized game sharing)
 // ════════════════════════════════════════════════════════
-const gun = Gun(['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun', 'https://peer.wallie.io/gun', 'https://plankton-app-6qfp3.ondigitalocean.app/']);
+// Disable localStorage/radisk caching — it causes massive write latency for
+// real-time multiplayer (writes get batched to localStorage before network send).
+// Use a separate Gun instance for cloud game storage (which DOES benefit from cache).
+const gun = Gun({
+  peers: ['https://gun.defucc.me/gun', 'https://relay.peer.ooo/gun', 'https://gun.o8.is/gun', 'https://peer.wallie.io/gun', 'https://plankton-app-6qfp3.ondigitalocean.app/'],
+  localStorage: false,
+  radisk: false
+});
 const cloudDB = gun.get('ordino-public-games-v1');
 
 function cloudPublish(gameData) {
