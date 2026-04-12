@@ -1128,6 +1128,9 @@ gun.on('bye', function(peer) {
 // Measure round-trip latency by timestamping our own writes and reading them back
 let _netDbgLastWriteT = 0;
 let _netDbgRoundTrip = 0;
+let _netDbgRxCount = 0;  // total packets received from remote players
+let _netDbgTxCount = 0;  // total packets sent
+let _netDbgLastRxT = 0;  // timestamp of last received packet
 function updateNetDebugOverlay() {
   const el = document.getElementById('netDebugOverlay');
   if(!el) return;
@@ -1139,8 +1142,10 @@ function updateNetDebugOverlay() {
   const label = hasRTC ? 'WEBRTC P2P ✓' : (_gunPeers.relay > 0 ? 'RELAY ONLY ⚠' : 'DISCONNECTED ✗');
   el.style.color = color;
   el.style.borderColor = color;
-  el.innerHTML = `<b style="color:${color}">${label}</b> &nbsp;relays: ${_gunPeers.relay} &nbsp;rtc: ${_gunPeers.rtc}` +
-    (_netDbgRoundTrip > 0 ? ` &nbsp;rtt: ${_netDbgRoundTrip}ms` : '');
+  const remoteCt = Object.keys(remotePlayers).length;
+  const lastRxAgo = _netDbgLastRxT ? Math.round((Date.now() - _netDbgLastRxT) / 1000) + 's ago' : 'never';
+  el.innerHTML = `<b style="color:${color}">${label}</b> &nbsp;relays:${_gunPeers.relay} rtc:${_gunPeers.rtc}` +
+    ` &nbsp;tx:${_netDbgTxCount} rx:${_netDbgRxCount} &nbsp;players:${remoteCt} &nbsp;lastRx:${lastRxAgo}`;
 }
 // Periodically refresh in case rtc status changes
 setInterval(updateNetDebugOverlay, 1000);
@@ -2463,28 +2468,38 @@ function mpSubscribeRoom() {
   if(!mpRoomNode || mpSubscribed) return;
   mpSubscribed = true;
 
-  // Subscribe to 'started' flag — clients load host's game data then start
+  // Pre-cache game data — subscribe early so it's ready before the start flag
+  let _mpGameDataLoaded = false;
+  let _mpGameDataHandler = mpRoomNode.get('gameData').on(function(gd) {
+    if(!gd || _mpGameDataLoaded) return;
+    try {
+      if(gd.spritesJSON) {
+        sprites = JSON.parse(gd.spritesJSON);
+        _mpGameDataLoaded = true;
+        console.log('[MP] Game data received: ' + sprites.length + ' sprites');
+      }
+      if(gd.blocksJSON) gameBlocks = JSON.parse(gd.blocksJSON);
+      if(gd.speed !== undefined) SPEED = gd.speed;
+      if(gd.gravity !== undefined) GRAVITY = gd.gravity;
+      if(gd.jumpHeight !== undefined) JUMP_FORCE = gd.jumpHeight;
+      if(gd.mapType) studioMapType = gd.mapType;
+    } catch(e) { console.warn('[MP] Failed to parse host game data', e); }
+    // If the game already started (started flag arrived first), begin now
+    if(mpActive && !gameAF) mpActualStartGame();
+  });
+
+  // Subscribe to 'started' flag — clients start once data is loaded
   mpRoomNode.get('started').on(function(data) {
     if(!data) return;
     if(data.value === true && !mpActive && !mpIsHost) {
       mpActive = true;
       document.getElementById('mpOverlay').style.display = 'none';
-      // Load the host's full game data (sprites, blocks, settings) so both see the same world
-      mpRoomNode.get('gameData').once(function(gd) {
-        if(gd) {
-          try {
-            if(gd.spritesJSON) sprites = JSON.parse(gd.spritesJSON);
-            if(gd.blocksJSON) gameBlocks = JSON.parse(gd.blocksJSON);
-            if(gd.speed !== undefined) SPEED = gd.speed;
-            if(gd.gravity !== undefined) GRAVITY = gd.gravity;
-            if(gd.jumpHeight !== undefined) JUMP_FORCE = gd.jumpHeight;
-            if(gd.mapType) studioMapType = gd.mapType;
-          } catch(e) { console.warn('[MP] Failed to parse host game data', e); }
-        }
-        mpActualStartGame();
-      });
-      // Fallback if gameData doesn't arrive within 3s — start with local sprites
-      setTimeout(() => { if(!gameAF) mpActualStartGame(); }, 3000);
+      // If game data already arrived, start immediately
+      if(_mpGameDataLoaded) {
+        if(!gameAF) mpActualStartGame();
+      }
+      // Fallback if gameData doesn't arrive within 5s — start with whatever we have
+      setTimeout(() => { if(!gameAF) mpActualStartGame(); }, 5000);
     }
   });
 
@@ -2503,11 +2518,14 @@ function mpSubscribeRoom() {
   // Subscribe to player updates (data is { j: JSON, t: ts })
   mpRoomNode.get('players').map().on(function(data, key) {
     if(!data || !data.j) return;
-    if(data.t && Date.now() - data.t > 8000) return;
+    // Don't drop data based on writer timestamp — relay latency can be high
+    // We use _lastUpdate (receive time) for stale cleanup instead
     let p;
     try { p = JSON.parse(data.j); } catch(e) { return; }
     if(!p || !p.n) return;
     if(p.n === currentUser) return; // Skip self
+    _netDbgRxCount++;
+    _netDbgLastRxT = Date.now();
     const existing = remotePlayers[p.n];
     const nx = p.x || 0, ny = p.y || 0;
     // Drop out-of-order packets
@@ -2579,12 +2597,12 @@ function mpSubscribeRoom() {
   let _tick = 0;
   mpPlayerWriteTimer = setInterval(() => {
     _tick++;
-    // Clean stale players
+    // Clean stale players — use generous timeout to survive slow relays
     const now = Date.now();
-    mpPlayerList = mpPlayerList.filter(p => now - p.lastSeen < 8000 || p.name === currentUser);
+    mpPlayerList = mpPlayerList.filter(p => now - p.lastSeen < 20000 || p.name === currentUser);
     for(const name in remotePlayers) {
       const rp = remotePlayers[name];
-      if(rp && rp._lastUpdate && now - rp._lastUpdate > 8000) delete remotePlayers[name];
+      if(rp && rp._lastUpdate && now - rp._lastUpdate > 20000) delete remotePlayers[name];
     }
     mpWriteSelfPlayer();
     // Sprite sync + public room registration less frequently (every ~600ms)
@@ -2599,7 +2617,6 @@ let _mpWriteSeq = 0;
 function mpWriteSelfPlayer() {
   if(!mpRoomNode) return;
   _mpWriteSeq++;
-  // Pack into single JSON string so Gun treats each update as one atomic HAM op
   const payload = {
     n: currentUser,
     x: Math.round((player.x || 0) * 10) / 10,
@@ -2612,7 +2629,14 @@ function mpWriteSelfPlayer() {
     s: _mpWriteSeq,
     t: Date.now()
   };
-  mpRoomNode.get('players').get(currentUser).put({ j: JSON.stringify(payload), t: Date.now() });
+  const jStr = JSON.stringify(payload);
+  _netDbgTxCount++;
+  // Write to TWO alternating slots so Gun always sees a "new" node change.
+  // Gun's HAM dedup can throttle rapid writes to the same key. By ping-ponging
+  // between slot A and B, each write goes to a key that hasn't been touched
+  // in ~200ms, which forces Gun to propagate immediately.
+  const slot = (_mpWriteSeq % 2 === 0) ? 'A' : 'B';
+  mpRoomNode.get('players').get(currentUser + '_' + slot).put({ j: jStr, t: Date.now(), s: _mpWriteSeq });
 }
 
 function mpWriteSpriteSync() {
@@ -2773,7 +2797,10 @@ function mpCleanup() {
   mpUnregisterRoom();
   // Remove self from room
   if(mpRoomNode && currentUser) {
-    try { mpRoomNode.get('players').get(currentUser).put({ name: currentUser, ts: 0 }); } catch(e){}
+    try {
+      mpRoomNode.get('players').get(currentUser + '_A').put({ j: '', t: 0, s: 0 });
+      mpRoomNode.get('players').get(currentUser + '_B').put({ j: '', t: 0, s: 0 });
+    } catch(e){}
   }
   mpCleanupRoomSubs();
   mpActive = false;
