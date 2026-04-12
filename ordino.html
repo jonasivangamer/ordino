@@ -444,6 +444,7 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 </div>
 <button id="backToBrowseBtn" onclick="backToBrowse()">◀ Games</button>
 <div id="mpPlayersBadge"></div>
+<div id="netDebugOverlay" style="position:fixed;bottom:4px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(0,0,0,.7);border:1px solid #555;border-radius:8px;padding:3px 12px;color:#aaa;font-size:.7rem;font-family:monospace;pointer-events:none;display:none;backdrop-filter:blur(4px)"></div>
 <button id="settingsBtn">⚙️</button>
 <div id="toast"></div>
 
@@ -1074,16 +1075,49 @@ const gun = Gun({
     ]
   }
 });
-// Log peer connections for debugging multiplayer latency
-let _gunPeerCount = 0;
+// Track Gun peer connections (relays + WebRTC) for on-screen debug overlay
+const _gunPeers = { relay: 0, rtc: 0, list: [] };
+function _isRtcPeer(peer) {
+  if(!peer) return false;
+  if(peer.url) return false; // has url = http relay
+  // WebRTC peers have a wire/rtc object but no .url
+  if(peer.wire && (peer.wire.readyState !== undefined || peer.wire.send)) return true;
+  return !peer.url; // fallback: no url means not a relay
+}
 gun.on('hi', function(peer) {
-  _gunPeerCount++;
-  console.log('[Gun] peer connected:', peer && peer.url ? peer.url : 'webrtc-p2p', '| total:', _gunPeerCount);
+  const rtc = _isRtcPeer(peer);
+  if(rtc) _gunPeers.rtc++;
+  else _gunPeers.relay++;
+  _gunPeers.list.push({ rtc, url: peer && peer.url ? peer.url : 'webrtc-p2p' });
+  console.log('[Gun] peer connected:', rtc ? 'WEBRTC-P2P ✓' : peer.url, '| relays:', _gunPeers.relay, 'rtc:', _gunPeers.rtc);
+  updateNetDebugOverlay();
 });
 gun.on('bye', function(peer) {
-  _gunPeerCount = Math.max(0, _gunPeerCount - 1);
-  console.log('[Gun] peer disconnected | total:', _gunPeerCount);
+  const rtc = _isRtcPeer(peer);
+  if(rtc) _gunPeers.rtc = Math.max(0, _gunPeers.rtc - 1);
+  else _gunPeers.relay = Math.max(0, _gunPeers.relay - 1);
+  console.log('[Gun] peer disconnected:', rtc ? 'webrtc' : (peer && peer.url), '| relays:', _gunPeers.relay, 'rtc:', _gunPeers.rtc);
+  updateNetDebugOverlay();
 });
+// Measure round-trip latency by timestamping our own writes and reading them back
+let _netDbgLastWriteT = 0;
+let _netDbgRoundTrip = 0;
+function updateNetDebugOverlay() {
+  const el = document.getElementById('netDebugOverlay');
+  if(!el) return;
+  // Only show during multiplayer
+  if(!mpActive && !mpRoomId) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const hasRTC = _gunPeers.rtc > 0;
+  const color = hasRTC ? '#4ade80' : (_gunPeers.relay > 0 ? '#fbbf24' : '#ef4444');
+  const label = hasRTC ? 'WEBRTC P2P ✓' : (_gunPeers.relay > 0 ? 'RELAY ONLY ⚠' : 'DISCONNECTED ✗');
+  el.style.color = color;
+  el.style.borderColor = color;
+  el.innerHTML = `<b style="color:${color}">${label}</b> &nbsp;relays: ${_gunPeers.relay} &nbsp;rtc: ${_gunPeers.rtc}` +
+    (_netDbgRoundTrip > 0 ? ` &nbsp;rtt: ${_netDbgRoundTrip}ms` : '');
+}
+// Periodically refresh in case rtc status changes
+setInterval(updateNetDebugOverlay, 1000);
 const cloudDB = gun.get('ordino-public-games-v1');
 
 function cloudPublish(gameData) {
@@ -2317,6 +2351,19 @@ function copyRoomCode() {
 function mpStartGame() {
   mpActive = true;
   document.getElementById('mpOverlay').style.display = 'none';
+  // Share full game data so all clients have the same world (sprites, blocks, settings)
+  if(mpRoomNode) {
+    const gamePayload = {
+      spritesJSON: JSON.stringify(sprites),
+      blocksJSON: JSON.stringify(gameBlocks || []),
+      speed: SPEED,
+      gravity: GRAVITY,
+      jumpHeight: JUMP_FORCE,
+      mapType: studioMapType || 'ground',
+      ts: Date.now()
+    };
+    mpRoomNode.get('gameData').put(gamePayload);
+  }
   // Tell all clients to start by flipping the 'started' flag
   if(mpRoomNode) mpRoomNode.get('started').put({ value: true, ts: Date.now() });
   mpActualStartGame();
@@ -2387,13 +2434,28 @@ function mpSubscribeRoom() {
   if(!mpRoomNode || mpSubscribed) return;
   mpSubscribed = true;
 
-  // Subscribe to 'started' flag — clients react when host starts
+  // Subscribe to 'started' flag — clients load host's game data then start
   mpRoomNode.get('started').on(function(data) {
     if(!data) return;
     if(data.value === true && !mpActive && !mpIsHost) {
       mpActive = true;
       document.getElementById('mpOverlay').style.display = 'none';
-      mpActualStartGame();
+      // Load the host's full game data (sprites, blocks, settings) so both see the same world
+      mpRoomNode.get('gameData').once(function(gd) {
+        if(gd) {
+          try {
+            if(gd.spritesJSON) sprites = JSON.parse(gd.spritesJSON);
+            if(gd.blocksJSON) gameBlocks = JSON.parse(gd.blocksJSON);
+            if(gd.speed !== undefined) SPEED = gd.speed;
+            if(gd.gravity !== undefined) GRAVITY = gd.gravity;
+            if(gd.jumpHeight !== undefined) JUMP_FORCE = gd.jumpHeight;
+            if(gd.mapType) studioMapType = gd.mapType;
+          } catch(e) { console.warn('[MP] Failed to parse host game data', e); }
+        }
+        mpActualStartGame();
+      });
+      // Fallback if gameData doesn't arrive within 3s — start with local sprites
+      setTimeout(() => { if(!gameAF) mpActualStartGame(); }, 3000);
     }
   });
 
