@@ -1012,6 +1012,8 @@ function deleteGame(idx) {
   g._deletedAt = Date.now();
   trash.push(g);
   localStorage.setItem('bw_trash', JSON.stringify(trash));
+  // Remove from cloud if published
+  removeGameFromCloud(g);
   // Remove from games
   games.splice(idx, 1);
   localStorage.setItem('bw_games', JSON.stringify(games));
@@ -1049,10 +1051,34 @@ function permanentDeleteGame(trashIdx) {
   const g = trash[trashIdx];
   if (!g) return;
   if (!confirm(`Permanently delete "${g.name}"? This cannot be undone.`)) return;
+  // Remove from cloud if published
+  removeGameFromCloud(g);
   trash.splice(trashIdx, 1);
   localStorage.setItem('bw_trash', JSON.stringify(trash));
   showToast('💀 Permanently deleted');
   renderGamesGrid();
+}
+
+// Remove a game from the Gun cloud + track its ID so it doesn't reappear
+function removeGameFromCloud(g) {
+  // Find matching cloud entry by author + name
+  const matchKey = g._cloudId || null;
+  const deletedIds = JSON.parse(localStorage.getItem('bw_deleted_cloud') || '[]');
+  if(matchKey) {
+    // Null it out on Gun so other devices see it gone
+    cloudDB.get(matchKey).put(null);
+    if(!deletedIds.includes(matchKey)) deletedIds.push(matchKey);
+  }
+  // Also search cloudGames for matching author+name and remove those
+  const toRemove = cloudGames.filter(cg => cg.author === g.author && cg.name === g.name);
+  toRemove.forEach(cg => {
+    if(cg._cloudId) {
+      cloudDB.get(cg._cloudId).put(null);
+      if(!deletedIds.includes(cg._cloudId)) deletedIds.push(cg._cloudId);
+    }
+  });
+  cloudGames = cloudGames.filter(cg => !(cg.author === g.author && cg.name === g.name));
+  localStorage.setItem('bw_deleted_cloud', JSON.stringify(deletedIds));
 }
 
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1152,9 +1178,12 @@ function cloudLoadGames() {
   renderGamesGrid();
   // Stop loading indicator after 8 seconds if no response
   setTimeout(() => { if (cloudLoading) { cloudLoading = false; renderGamesGrid(); } }, 8000);
+  const deletedIds = JSON.parse(localStorage.getItem('bw_deleted_cloud') || '[]');
   cloudDB.map().once(function(data, key) {
     cloudLoading = false;
     if (!data || !data.name) return;
+    // Skip games that were deleted
+    if (deletedIds.includes(key)) return;
     try {
       const g = {
         name: data.name,
