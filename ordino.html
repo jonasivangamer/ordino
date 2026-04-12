@@ -1357,6 +1357,9 @@ function publishGame() {
 function doPublish(visibility) {
   document.getElementById('publishModal').style.display = 'none';
   const gs = readGameSettings();
+  const isEditing = currentGameIdx >= 0;
+  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
+  const oldGame = isEditing ? games[currentGameIdx] : null;
   const gameData = {
     ...gs,
     author: currentUser,
@@ -1365,21 +1368,22 @@ function doPublish(visibility) {
     visibility: visibility,
     publishedAt: Date.now(),
   };
-  // Always save locally
-  const games = JSON.parse(localStorage.getItem('bw_games') || '[]');
-  if (currentGameIdx >= 0 && games[currentGameIdx] && games[currentGameIdx].author === currentUser) {
+  // Save locally
+  if (isEditing && oldGame && oldGame.author === currentUser) {
+    // Updating existing game — remove old cloud copy first
+    removeGameFromCloud(oldGame);
     games[currentGameIdx] = gameData;
   } else {
     games.push(gameData);
     currentGameIdx = games.length - 1;
   }
   localStorage.setItem('bw_games', JSON.stringify(games));
-  // If public, also push to Gun cloud
+  // If public, publish fresh cloud copy
   if (visibility === 'public') {
     cloudPublish(gameData);
-    showToast('🌍 Published publicly: ' + gs.name);
+    showToast(isEditing ? '🔄 Updated: ' + gs.name : '🌍 Published: ' + gs.name);
   } else {
-    showToast('🔒 Published privately: ' + gs.name);
+    showToast(isEditing ? '🔄 Updated privately: ' + gs.name : '🔒 Published privately: ' + gs.name);
   }
 }
 
@@ -1779,7 +1783,7 @@ function gameLoop(ts) {
 
   // Sprite physics + player collision
   for (const s of sprites) {
-    if (!s.visible || s.isSpawn || !s._x) continue;
+    if (!s.visible || s.isSpawn || s._x == null) continue;
     const sw = s.hitbox.w,  sh = s.hitbox.h;
     const rw = s.hitbox.rw || sw, rh = s.hitbox.rh || sh;
     const ox = s.hitbox.ox || 0,  oy = s.hitbox.oy || 0;
@@ -1806,13 +1810,21 @@ function gameLoop(ts) {
     }
 
     if (s.solid) {
-      // Hitbox rect — uses ox/oy offset from applyHitbox if available
-      const sx = s._x - rw/2 + ox;   // hitbox left
-      const sy = s._y - rh  + oy;    // hitbox top
+      // Ground sprites use full canvas width for collision (same as rendering)
+      let sx, sy, colW;
+      if (s.isGround) {
+        sx = 0;
+        sy = s._y - rh + oy;
+        colW = gameCanvas.width;
+      } else {
+        sx = s._x - rw/2 + ox;
+        sy = s._y - rh  + oy;
+        colW = sw;
+      }
 
-      // Land on top — only when actually falling
-      if (player.x+player.w > sx && player.x < sx+sw) {
-        if (player.vy > 0.5 && player.y+player.h > sy && player.y+player.h < sy+sh+20) {
+      // Land on top — when falling or resting on surface
+      if (player.x+player.w > sx && player.x < sx+colW) {
+        if (player.vy >= 0 && player.y+player.h > sy && player.y+player.h < sy+sh+20) {
           player.y = sy - player.h; player.vy = 0; player.onGround = true;
         }
         // Hit bottom — player jumping into underside of sprite
@@ -1821,17 +1833,19 @@ function gameLoop(ts) {
         }
       }
 
-      // Side collision
-      const vertOverlap = player.y + player.h > sy + 2 && player.y < sy + sh;
-      if (vertOverlap && player.x+player.w > sx && player.x < sx+sw) {
-        const oR = player.x + player.w - sx;
-        const oL = sx + sw - player.x;
-        if (s.gravity) {
-          if (player.vx > 0 && oR > 0 && oR < sw*0.75) { s._vx = player.vx*1.1; player.x = sx - player.w; }
-          else if (player.vx < 0 && oL > 0 && oL < sw*0.75) { s._vx = player.vx*1.1; player.x = sx + sw; }
-        } else {
-          if (oR > 0 && oR <= oL) player.x = sx - player.w;
-          else if (oL > 0 && oL < oR) player.x = sx + sw;
+      // Side collision (not for ground — ground has no sides)
+      if (!s.isGround) {
+        const vertOverlap = player.y + player.h > sy + 2 && player.y < sy + sh;
+        if (vertOverlap && player.x+player.w > sx && player.x < sx+colW) {
+          const oR = player.x + player.w - sx;
+          const oL = sx + colW - player.x;
+          if (s.gravity) {
+            if (player.vx > 0 && oR > 0 && oR < sw*0.75) { s._vx = player.vx*1.1; player.x = sx - player.w; }
+            else if (player.vx < 0 && oL > 0 && oL < sw*0.75) { s._vx = player.vx*1.1; player.x = sx + sw; }
+          } else {
+            if (oR > 0 && oR <= oL) player.x = sx - player.w;
+            else if (oL > 0 && oL < oR) player.x = sx + sw;
+          }
         }
       }
     }
@@ -2477,6 +2491,14 @@ function mpSubscribeRoom() {
         sprites = JSON.parse(gd.spritesJSON);
         _mpGameDataLoaded = true;
         console.log('[MP] Game data received: ' + sprites.length + ' sprites');
+        // Pre-init runtime positions so collision/rendering work immediately
+        const W = gameCanvas.width, H = gameCanvas.height;
+        for (const s of sprites) {
+          if(s._x == null) s._x = s.x * (W / 276);
+          if(s._y == null) s._y = s.y * (H / 180);
+          s._vy = s._vy || 0;
+          s._vx = s._vx || 0;
+        }
       }
       if(gd.blocksJSON) gameBlocks = JSON.parse(gd.blocksJSON);
       if(gd.speed !== undefined) SPEED = gd.speed;
@@ -3018,6 +3040,15 @@ function openStudio(fromBrowse) {
   document.getElementById('studioScreen').classList.add('open');
   buildCatTabs(); buildBlockList(); buildSpriteList(); updateHint();
   switchRightTab('sprites');
+  // Update Publish/Update button text based on editing context
+  const isEditing = currentGameIdx >= 0;
+  const pubBtn = document.getElementById('publishBtn');
+  if(pubBtn) pubBtn.textContent = isEditing ? '🔄 Update' : '🚀 Publish';
+  const pubBtn2 = document.querySelector('.publish-btn');
+  if(pubBtn2) pubBtn2.textContent = isEditing ? '🔄 Update Game' : '🚀 Publish Game';
+  // Update the modal title too
+  const pubModalTitle = document.querySelector('#publishModal h2');
+  if(pubModalTitle) pubModalTitle.textContent = isEditing ? 'Update Game' : 'Publish Game';
   studioLoop();
 }
 
