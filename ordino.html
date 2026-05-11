@@ -180,6 +180,12 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 .model-group-header.collapsed .model-chevron{transform:rotate(-90deg)}
 .model-group-parts{padding:4px 4px 4px 18px}
 .model-group-parts .sprite-item{margin-bottom:4px}
+/* Scripted part wrapper — same card style as model group but purple */
+.script-group{margin-bottom:8px;border:1px solid rgba(124,77,255,.45);border-radius:8px;overflow:hidden}
+.script-group-header{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(124,77,255,.12);cursor:pointer;font-size:.82rem;color:#b388ff;font-weight:700}
+.script-group-header .model-chevron{font-size:.65rem;transition:.2s}
+.script-group-header.collapsed .model-chevron{transform:rotate(-90deg)}
+.script-group-body{padding:4px 4px 4px 4px}
 /* Right-click context menu */
 #partContextMenu{position:fixed;z-index:99999;background:#252525;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:6px 0;min-width:170px;box-shadow:0 8px 32px rgba(0,0,0,.7);display:none}
 #partContextMenu .ctx-item{padding:9px 16px;color:#eee;font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.12s}
@@ -3640,21 +3646,24 @@ function buildSpriteList() {
     }
   });
 
+  // Track collapsed state for scripted parts
+  if (!buildSpriteList._scriptCollapsed) buildSpriteList._scriptCollapsed = {};
+  const scriptCollapsed = buildSpriteList._scriptCollapsed;
+
   function makeSpriteRow(i) {
     const s = sprites[i];
-    const div = document.createElement('div');
+    const row = document.createElement('div');
     const isPrimary = i === selectedSprite;
     const isMulti = multiSelectedSprites.has(i);
-    div.className = 'sprite-item' + (isPrimary ? ' selected' : isMulti ? ' multi-selected' : '');
-    div.innerHTML = `
+    row.className = 'sprite-item' + (isPrimary ? ' selected' : isMulti ? ' multi-selected' : '');
+    row.innerHTML = `
       <div class="sprite-swatch" style="background:${s.color}"></div>
       <div class="sprite-info">
-        <div class="sprite-name">${escHtml(s.name)}${s.hasScript ? ' <span style="color:#ff8c00;font-size:.7rem">📜</span>' : ''}</div>
+        <div class="sprite-name">${escHtml(s.name)}</div>
         <div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div>
       </div>`;
-    div.onclick = (e) => {
+    row.onclick = (e) => {
       if (e.shiftKey) {
-        // Multi-select toggle
         if (multiSelectedSprites.has(i)) multiSelectedSprites.delete(i);
         else multiSelectedSprites.add(i);
         buildSpriteList();
@@ -3667,8 +3676,36 @@ function buildSpriteList() {
         updateScriptLock();
       }
     };
-    div.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
-    return div;
+    row.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+
+    // If this part has a script, wrap it in a styled card like a model
+    if (s.hasScript) {
+      const collapsed = scriptCollapsed[i] || false;
+      const card = document.createElement('div');
+      card.className = 'script-group';
+      const hdr = document.createElement('div');
+      hdr.className = 'script-group-header' + (collapsed ? ' collapsed' : '');
+      hdr.innerHTML = `<span class="model-chevron">▼</span> <span>📜 ${escHtml(s.name)}</span><span style="color:rgba(255,255,255,.3);font-size:.7rem;margin-left:auto">script</span>`;
+      hdr.onclick = (e) => {
+        // Header click toggles collapse; also selects the part
+        if (!e.shiftKey) {
+          saveSpriteBlocks(); selectedSprite = i; multiSelectedSprites.clear();
+          loadSpriteBlocks(); updateScriptLock();
+        }
+        scriptCollapsed[i] = !scriptCollapsed[i];
+        buildSpriteList();
+      };
+      hdr.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+      card.appendChild(hdr);
+      if (!collapsed) {
+        const body = document.createElement('div');
+        body.className = 'script-group-body';
+        body.appendChild(row);
+        card.appendChild(body);
+      }
+      return card;
+    }
+    return row;
   }
 
   // Render model groups first
