@@ -3018,9 +3018,10 @@ let sprites=[
   {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true},
 ];
 let selectedSprite=0;
+let selectedScriptId = null; // id of the active script within selectedSprite
 let multiSelectedSprites = new Set(); // indices of shift-clicked selected parts
 let models = []; // [{ id, name, collapsed }]  — groups of parts sharing modelId
-let spriteBlocksMap = {}; // { spriteIndex: [blockData, ...] }
+let spriteBlocksMap = {}; // { 'spriteIdx_scriptId': [blockData, ...] }
 let isRunning=false;
 let studioAF;
 
@@ -3031,6 +3032,7 @@ function resetStudioForNewGame() {
   ];
   studioMapType='ground';
   selectedSprite=0;
+  selectedScriptId=null;
   multiSelectedSprites = new Set();
   models = [];
   spriteBlocksMap = {};
@@ -3061,19 +3063,29 @@ function loadStudioFromGame(g) {
   if (g.mapType) studioMapType = g.mapType;
   models = g.models ? JSON.parse(JSON.stringify(g.models)) : [];
   selectedSprite = 0;
+  selectedScriptId = null;
   multiSelectedSprites = new Set();
   spriteBlocksMap = {};
-  // Rebuild per-sprite blocks map from flat array
+  // Migrate old hasScript → scripts array
+  sprites.forEach(s => {
+    if (s.hasScript && (!s.scripts || !s.scripts.length)) {
+      s.scripts = [{ id: 'script_0', name: 'Script' }];
+    }
+    delete s.hasScript;
+    if (!s.scripts) s.scripts = [];
+  });
+  // Rebuild block map from flat array using composite key
   if (g.blocks) {
     g.blocks.forEach(b => {
       const idx = b.spriteIdx ?? 0;
-      if (!spriteBlocksMap[idx]) spriteBlocksMap[idx] = [];
-      spriteBlocksMap[idx].push(b);
+      const sid = b.scriptId || 'script_0';
+      const key = idx + '_' + sid;
+      if (!spriteBlocksMap[key]) spriteBlocksMap[key] = [];
+      spriteBlocksMap[key].push(b);
     });
   }
-  // Load selected sprite's blocks into script area
+  // Clear script area, don't load any script until user clicks one
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
-  if (spriteBlocksMap[0]) restoreScriptBlocks(spriteBlocksMap[0]);
   updateHint();
   updateScriptLock();
 }
@@ -3377,9 +3389,12 @@ function updateHint(){
 }
 
 // Save/restore
-// Save current script area blocks to spriteBlocksMap for selected sprite
+function _scriptKey() { return selectedSprite + '_' + (selectedScriptId || 'none'); }
+
+// Save current script area blocks to spriteBlocksMap for selected sprite+script
 function saveSpriteBlocks() {
-  spriteBlocksMap[selectedSprite] = allScriptBlocks().map(el => {
+  if (!selectedScriptId) return;
+  spriteBlocksMap[_scriptKey()] = allScriptBlocks().map(el => {
     const vals = {};
     el.querySelectorAll('[data-name]').forEach(inp => { vals[inp.dataset.name] = inp.value; });
     return { id: el.dataset.blockId, uid: el.dataset.uid, snapParent: el.dataset.snapParent || '',
@@ -3387,24 +3402,29 @@ function saveSpriteBlocks() {
   });
 }
 
-// Load blocks from spriteBlocksMap into script area for selected sprite
+// Load blocks from spriteBlocksMap for selected sprite+script
 function loadSpriteBlocks() {
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
-  const saved = spriteBlocksMap[selectedSprite];
-  if (saved && saved.length > 0) restoreScriptBlocks(saved);
+  if (selectedScriptId) {
+    const saved = spriteBlocksMap[_scriptKey()];
+    if (saved && saved.length > 0) restoreScriptBlocks(saved);
+  }
   updateHint();
   updateScriptLock();
 }
 
 // Collect ALL sprites' blocks for publishing
 function getScriptBlocksData() {
-  saveSpriteBlocks(); // save current sprite first
+  saveSpriteBlocks(); // save current script first
   const all = [];
-  for (const idx in spriteBlocksMap) {
-    const spr = sprites[idx];
+  for (const key in spriteBlocksMap) {
+    const parts = key.split('_');
+    const sprIdx = parseInt(parts[0]);
+    const scrId = parts.slice(1).join('_');
+    const spr = sprites[sprIdx];
     if (!spr) continue;
-    (spriteBlocksMap[idx] || []).forEach(b => {
-      all.push({ ...b, spriteIdx: parseInt(idx), spriteName: spr.name });
+    (spriteBlocksMap[key] || []).forEach(b => {
+      all.push({ ...b, spriteIdx: sprIdx, scriptId: scrId, spriteName: spr.name });
     });
   }
   return all;
@@ -3685,32 +3705,40 @@ function buildSpriteList() {
       const body = document.createElement('div');
       body.className = 'script-group-body';
 
-      // Script child item inside the part card
-      if (s.hasScript) {
+      // Script child items inside the part card — one row per script
+      const scripts = s.scripts || [];
+      scripts.forEach(sc => {
+        const isScriptActive = isPrimary && selectedScriptId === sc.id;
         const scriptRow = document.createElement('div');
-        const isScriptActive = isPrimary;
         scriptRow.className = 'sprite-item' + (isScriptActive ? ' selected' : '');
-        scriptRow.style.cssText = 'gap:6px;padding:6px 10px;background:rgba(124,77,255,.1);border-color:' + (isScriptActive ? '#7c4dff' : 'transparent');
-        scriptRow.innerHTML = `<span style="font-size:.9rem">📜</span><div class="sprite-info"><div class="sprite-name" style="color:#b388ff">Script</div><div class="sprite-coords">click to code</div></div>`;
+        scriptRow.style.cssText = 'gap:6px;padding:6px 10px;background:rgba(124,77,255,.08);border-color:' + (isScriptActive ? '#7c4dff' : 'transparent');
+        scriptRow.innerHTML = `<span style="font-size:.9rem">📜</span><div class="sprite-info"><div class="sprite-name" style="color:#b388ff">${escHtml(sc.name)}</div><div class="sprite-coords">click to code</div></div>`;
         scriptRow.onclick = (e) => {
           e.stopPropagation();
           saveSpriteBlocks();
           selectedSprite = i;
+          selectedScriptId = sc.id;
           multiSelectedSprites.clear();
           loadSpriteBlocks();
           buildSpriteList();
           updateScriptLock();
         };
-        scriptRow.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+        scriptRow.oncontextmenu = (e) => {
+          e.preventDefault();
+          // Show script-specific context menu
+          _ctxTargetIdx = i; _ctxTargetScriptId = sc.id; _ctxTargetModelId = null;
+          showScriptContextMenu(e, i, sc.id);
+        };
         body.appendChild(scriptRow);
-      } else {
-        // No script — show "Add Script" row
-        const addRow = document.createElement('div');
-        addRow.className = 'sprite-item';
-        addRow.style.cssText = 'gap:6px;padding:6px 10px;border:1px dashed rgba(124,77,255,.3);opacity:.6;';
-        addRow.innerHTML = `<span style="font-size:.9rem">➕</span><div class="sprite-info"><div class="sprite-name" style="color:rgba(180,136,255,.7)">Add Script</div><div class="sprite-coords">right-click part</div></div>`;
-        body.appendChild(addRow);
-      }
+      });
+
+      // "+ Add Script" button at the bottom of the part card
+      const addBtn = document.createElement('div');
+      addBtn.className = 'sprite-item';
+      addBtn.style.cssText = 'gap:6px;padding:5px 10px;border:1px dashed rgba(124,77,255,.3);opacity:.7;cursor:pointer;';
+      addBtn.innerHTML = `<span style="font-size:.85rem;color:#b388ff">➕</span><div class="sprite-name" style="color:rgba(180,136,255,.8);font-size:.78rem">Add Script</div>`;
+      addBtn.onclick = (e) => { e.stopPropagation(); addScriptToSprite(i); };
+      body.appendChild(addBtn);
 
       card.appendChild(body);
     }
@@ -3748,12 +3776,10 @@ function buildSpriteList() {
 
 // ── Script lock overlay ──
 function updateScriptLock() {
-  const spr = sprites[selectedSprite];
   const overlay = document.getElementById('scriptLockOverlay');
   if (!overlay) return;
-  const locked = !spr || !spr.hasScript;
+  const locked = !selectedScriptId;
   overlay.style.display = locked ? 'flex' : 'none';
-  // Also dim palette when locked
   const palette = document.getElementById('palette');
   if (palette) palette.style.opacity = locked ? '0.4' : '1';
   if (palette) palette.style.pointerEvents = locked ? 'none' : 'all';
@@ -3761,14 +3787,28 @@ function updateScriptLock() {
 
 function ctxAddScriptForSelected() {
   if (selectedSprite < 0 || selectedSprite >= sprites.length) return;
-  sprites[selectedSprite].hasScript = true;
+  addScriptToSprite(selectedSprite);
+}
+
+function addScriptToSprite(idx) {
+  const spr = sprites[idx];
+  if (!spr.scripts) spr.scripts = [];
+  const id = 'script_' + Date.now();
+  const name = 'Script ' + (spr.scripts.length + 1);
+  spr.scripts.push({ id, name });
+  // Switch to the new script
+  saveSpriteBlocks();
+  selectedSprite = idx;
+  selectedScriptId = id;
+  loadSpriteBlocks();
   buildSpriteList();
-  showToast('📜 Script added to ' + sprites[selectedSprite].name);
+  showToast('📜 ' + name + ' added to ' + spr.name);
 }
 
 // ── Right-click context menu ──
 let _ctxTargetIdx = -1;
 let _ctxTargetModelId = null;
+let _ctxTargetScriptId = null;
 
 function showPartContextMenu(e, idx) {
   _ctxTargetIdx = idx;
@@ -3778,8 +3818,8 @@ function showPartContextMenu(e, idx) {
   // Show/hide items based on state
   const allSelected = multiSelectedSprites.size > 1 || (multiSelectedSprites.size === 1 && !multiSelectedSprites.has(idx));
   const canGroup = multiSelectedSprites.size > 1 || (multiSelectedSprites.size >= 1 && idx !== selectedSprite);
-  document.getElementById('ctxAddScript').style.display = (!spr.hasScript) ? 'flex' : 'none';
-  document.getElementById('ctxRemoveScript').style.display = spr.hasScript ? 'flex' : 'none';
+  document.getElementById('ctxAddScript').style.display = 'flex'; // always can add more scripts
+  document.getElementById('ctxRemoveScript').style.display = (spr.scripts && spr.scripts.length > 0) ? 'flex' : 'none';
   document.getElementById('ctxGroup').style.display = canGroup ? 'flex' : 'none';
   document.getElementById('ctxUngroup').style.display = spr.modelId ? 'flex' : 'none';
   document.getElementById('ctxUnite').style.display = canGroup ? 'flex' : 'none';
@@ -3804,29 +3844,64 @@ function showModelContextMenu(e, modelId) {
 
 function hideContextMenu() {
   document.getElementById('partContextMenu').style.display = 'none';
+  document.getElementById('scriptContextMenu').style.display = 'none';
 }
 document.addEventListener('click', hideContextMenu);
 document.addEventListener('keydown', e => { if(e.key === 'Escape') hideContextMenu(); });
 
+function showScriptContextMenu(e, sprIdx, scriptId) {
+  hideContextMenu();
+  const menu = document.getElementById('scriptContextMenu');
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 100) + 'px';
+}
+
+function ctxRenameScript() {
+  const spr = sprites[_ctxTargetIdx];
+  if (!spr) return;
+  const sc = (spr.scripts || []).find(s => s.id === _ctxTargetScriptId);
+  if (!sc) return;
+  const newName = prompt('Rename script:', sc.name);
+  if (newName && newName.trim()) { sc.name = newName.trim(); buildSpriteList(); }
+}
+
+function ctxDeleteScript() {
+  const spr = sprites[_ctxTargetIdx];
+  if (!spr) return;
+  const idx2 = (spr.scripts || []).findIndex(s => s.id === _ctxTargetScriptId);
+  if (idx2 < 0) return;
+  // Delete blocks for this script
+  delete spriteBlocksMap[_ctxTargetIdx + '_' + _ctxTargetScriptId];
+  spr.scripts.splice(idx2, 1);
+  // If this was the active script, deselect
+  if (selectedSprite === _ctxTargetIdx && selectedScriptId === _ctxTargetScriptId) {
+    selectedScriptId = null;
+    document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
+    updateHint();
+  }
+  buildSpriteList();
+  showToast('🗑 Script deleted');
+}
+
 function ctxAddScript() {
   if (_ctxTargetIdx < 0 || _ctxTargetIdx >= sprites.length) return;
-  sprites[_ctxTargetIdx].hasScript = true;
-  saveSpriteBlocks();
-  selectedSprite = _ctxTargetIdx;
   multiSelectedSprites.clear();
-  loadSpriteBlocks();
-  buildSpriteList();
-  showToast('📜 Script added to ' + sprites[_ctxTargetIdx].name);
+  addScriptToSprite(_ctxTargetIdx);
 }
 
 function ctxRemoveScript() {
   if (_ctxTargetIdx < 0 || _ctxTargetIdx >= sprites.length) return;
-  sprites[_ctxTargetIdx].hasScript = false;
-  spriteBlocksMap[_ctxTargetIdx] = [];
+  const spr = sprites[_ctxTargetIdx];
+  if (!spr.scripts || !spr.scripts.length) return;
+  // Remove all scripts from this part
+  spr.scripts.forEach(sc => { delete spriteBlocksMap[_ctxTargetIdx + '_' + sc.id]; });
+  spr.scripts = [];
+  if (selectedSprite === _ctxTargetIdx) { selectedScriptId = null; }
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
   updateHint();
   buildSpriteList();
-  showToast('🚫 Script removed from ' + sprites[_ctxTargetIdx].name);
+  showToast('🚫 Scripts removed from ' + spr.name);
 }
 
 function ctxDelete() {
@@ -3892,7 +3967,7 @@ function ctxUnite() {
     isSpawn: false, gravity: base.gravity,
     hitbox: { w: mw, h: mh },
     sprW: mw, sprH: mh,
-    hasScript: idxArr.some(i => sprites[i].hasScript),
+    scripts: idxArr.flatMap(i => (sprites[i].scripts || [])).map((sc, si) => ({ id: 'script_united_' + si, name: sc.name })),
   };
   // Remove united sprites (in reverse order to preserve indices)
   idxArr.slice().reverse().forEach(i => sprites.splice(i, 1));
@@ -4416,6 +4491,12 @@ if (currentUser) {
   document.getElementById('authScreen').style.display = 'flex';
 }
 </script>
+<!-- Right-click context menu for scripts -->
+<div id="scriptContextMenu" style="position:fixed;z-index:99999;background:#252525;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:6px 0;min-width:160px;box-shadow:0 8px 32px rgba(0,0,0,.7);display:none">
+  <div class="ctx-item" onclick="ctxRenameScript()">✏️ Rename Script</div>
+  <div class="ctx-item danger" onclick="ctxDeleteScript()">🗑 Delete Script</div>
+</div>
+
 <!-- Right-click context menu for parts -->
 <div id="partContextMenu">
   <div class="ctx-item" id="ctxAddScript" onclick="ctxAddScript()">📜 Add Script</div>
