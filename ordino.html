@@ -162,8 +162,9 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 #stageCanvas{display:block;width:276px;height:180px;border-radius:6px}
 #spritePanel{flex:1;overflow-y:auto;padding:10px;scrollbar-width:thin;scrollbar-color:#444 #1e1e1e}
 #spritePanel h3{color:#ccc;font-size:.8rem;margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em}
-.sprite-item{display:flex;align-items:center;gap:8px;background:#333;border-radius:6px;padding:7px 10px;margin-bottom:6px;cursor:pointer;border:2px solid transparent;transition:.15s}
+.sprite-item{display:flex;align-items:center;gap:8px;background:#333;border-radius:6px;padding:7px 10px;margin-bottom:6px;cursor:pointer;border:2px solid transparent;transition:.15s;user-select:none}
 .sprite-item.selected{border-color:#7c4dff}
+.sprite-item.multi-selected{border-color:#ff8c00;background:#3a2a00}
 .sprite-swatch{width:28px;height:28px;border-radius:4px;flex-shrink:0}
 .sprite-info{flex:1}
 .sprite-name{color:#eee;font-size:.85rem;font-weight:600}
@@ -172,6 +173,26 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 #addSpriteBtn:hover{background:#555;color:#fff}
 #spriteSettings{margin-top:10px}
 #spriteSettings h4{color:#aaa;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px;padding-top:10px;border-top:1px solid #3a3a3a}
+/* Model group rows */
+.model-group{margin-bottom:8px;border:1px solid rgba(255,140,0,.35);border-radius:8px;overflow:hidden}
+.model-group-header{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,140,0,.1);cursor:pointer;font-size:.82rem;color:#ffb74d;font-weight:700}
+.model-group-header .model-chevron{font-size:.65rem;transition:.2s}
+.model-group-header.collapsed .model-chevron{transform:rotate(-90deg)}
+.model-group-parts{padding:4px 4px 4px 18px}
+.model-group-parts .sprite-item{margin-bottom:4px}
+/* Right-click context menu */
+#partContextMenu{position:fixed;z-index:99999;background:#252525;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:6px 0;min-width:170px;box-shadow:0 8px 32px rgba(0,0,0,.7);display:none}
+#partContextMenu .ctx-item{padding:9px 16px;color:#eee;font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.12s}
+#partContextMenu .ctx-item:hover{background:rgba(255,255,255,.08)}
+#partContextMenu .ctx-sep{height:1px;background:rgba(255,255,255,.1);margin:4px 0}
+#partContextMenu .ctx-item.danger{color:#ef5350}
+#partContextMenu .ctx-item.danger:hover{background:rgba(229,57,53,.15)}
+/* Script lock overlay */
+#scriptLockOverlay{position:absolute;inset:0;background:rgba(0,0,0,.7);z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;backdrop-filter:blur(3px);pointer-events:all}
+#scriptArea{position:relative}
+.script-lock-msg{color:rgba(255,255,255,.7);font-size:.9rem;text-align:center}
+.script-lock-add-btn{padding:10px 22px;background:linear-gradient(135deg,#7c4dff,#ff8c00);border:none;border-radius:8px;color:#fff;font-size:.9rem;font-weight:700;cursor:pointer;transition:.2s}
+.script-lock-add-btn:hover{filter:brightness(1.15)}
 .spr-setting-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
 .spr-setting-label{color:rgba(255,255,255,.7);font-size:.82rem}
 .spr-toggle-group{display:flex;gap:3px}
@@ -519,6 +540,11 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     </div>
     <div id="scriptArea">
       <div id="emptyHint">🧱 Drag blocks here<br>to build your script!</div>
+      <div id="scriptLockOverlay">
+        <div style="font-size:2rem">🔒</div>
+        <div class="script-lock-msg">Select a part with a Script<br>to start coding</div>
+        <button class="script-lock-add-btn" onclick="ctxAddScriptForSelected()">+ Add Script to Part</button>
+      </div>
     </div>
     <div id="rightPanel">
       <div class="right-tabs">
@@ -1365,6 +1391,7 @@ function doPublish(visibility) {
     author: currentUser,
     sprites: JSON.parse(JSON.stringify(sprites)),
     blocks: getScriptBlocksData(),
+    models: JSON.parse(JSON.stringify(models)),
     visibility: visibility,
     publishedAt: Date.now(),
   };
@@ -2982,6 +3009,8 @@ let sprites=[
   {name:'Ground',x:138,y:180,color:'#888888',size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,hitbox:{w:850,h:16},sprW:850,sprH:16,isGround:true},
 ];
 let selectedSprite=0;
+let multiSelectedSprites = new Set(); // indices of shift-clicked selected parts
+let models = []; // [{ id, name, collapsed }]  — groups of parts sharing modelId
 let spriteBlocksMap = {}; // { spriteIndex: [blockData, ...] }
 let isRunning=false;
 let studioAF;
@@ -2993,6 +3022,8 @@ function resetStudioForNewGame() {
   ];
   studioMapType='ground';
   selectedSprite=0;
+  multiSelectedSprites = new Set();
+  models = [];
   spriteBlocksMap = {};
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e=>e.remove());
   updateHint();
@@ -3019,7 +3050,9 @@ function resetStudioForNewGame() {
 function loadStudioFromGame(g) {
   if (g.sprites) sprites = JSON.parse(JSON.stringify(g.sprites));
   if (g.mapType) studioMapType = g.mapType;
+  models = g.models ? JSON.parse(JSON.stringify(g.models)) : [];
   selectedSprite = 0;
+  multiSelectedSprites = new Set();
   spriteBlocksMap = {};
   // Rebuild per-sprite blocks map from flat array
   if (g.blocks) {
@@ -3033,12 +3066,13 @@ function loadStudioFromGame(g) {
   document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
   if (spriteBlocksMap[0]) restoreScriptBlocks(spriteBlocksMap[0]);
   updateHint();
+  updateScriptLock();
 }
 
 function openStudio(fromBrowse) {
   cancelAnimationFrame(gameAF);
   document.getElementById('studioScreen').classList.add('open');
-  buildCatTabs(); buildBlockList(); buildSpriteList(); updateHint();
+  buildCatTabs(); buildBlockList(); buildSpriteList(); updateHint(); updateScriptLock();
   switchRightTab('sprites');
   // Update Publish/Update button text based on editing context
   const isEditing = currentGameIdx >= 0;
@@ -3350,6 +3384,7 @@ function loadSpriteBlocks() {
   const saved = spriteBlocksMap[selectedSprite];
   if (saved && saved.length > 0) restoreScriptBlocks(saved);
   updateHint();
+  updateScriptLock();
 }
 
 // Collect ALL sprites' blocks for publishing
@@ -3591,15 +3626,236 @@ function studioLoop(){drawStage();studioAF=requestAnimationFrame(studioLoop);}
 
 // ── Sprites list ──
 function buildSpriteList() {
-  const el=document.getElementById('spriteList'); el.innerHTML='';
-  sprites.forEach((s,i)=>{
-    const div=document.createElement('div');
-    div.className='sprite-item'+(i===selectedSprite?' selected':'');
-    div.innerHTML=`<div class="sprite-swatch" style="background:${s.color}"></div><div class="sprite-info"><div class="sprite-name">${s.name}</div><div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div></div>`;
-    div.onclick=()=>{saveSpriteBlocks();selectedSprite=i;loadSpriteBlocks();buildSpriteList();};
-    el.appendChild(div);
+  const el = document.getElementById('spriteList'); el.innerHTML = '';
+
+  // Separate parts into: ungrouped, and grouped by modelId
+  const grouped = {}; // modelId -> [idx]
+  const ungrouped = [];
+  sprites.forEach((s, i) => {
+    if (s.modelId) {
+      if (!grouped[s.modelId]) grouped[s.modelId] = [];
+      grouped[s.modelId].push(i);
+    } else {
+      ungrouped.push(i);
+    }
   });
+
+  function makeSpriteRow(i) {
+    const s = sprites[i];
+    const div = document.createElement('div');
+    const isPrimary = i === selectedSprite;
+    const isMulti = multiSelectedSprites.has(i);
+    div.className = 'sprite-item' + (isPrimary ? ' selected' : isMulti ? ' multi-selected' : '');
+    div.innerHTML = `
+      <div class="sprite-swatch" style="background:${s.color}"></div>
+      <div class="sprite-info">
+        <div class="sprite-name">${escHtml(s.name)}${s.hasScript ? ' <span style="color:#ff8c00;font-size:.7rem">📜</span>' : ''}</div>
+        <div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div>
+      </div>`;
+    div.onclick = (e) => {
+      if (e.shiftKey) {
+        // Multi-select toggle
+        if (multiSelectedSprites.has(i)) multiSelectedSprites.delete(i);
+        else multiSelectedSprites.add(i);
+        buildSpriteList();
+      } else {
+        saveSpriteBlocks();
+        selectedSprite = i;
+        multiSelectedSprites.clear();
+        loadSpriteBlocks();
+        buildSpriteList();
+        updateScriptLock();
+      }
+    };
+    div.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+    return div;
+  }
+
+  // Render model groups first
+  models.forEach(model => {
+    const partIdxs = grouped[model.id] || [];
+    if (!partIdxs.length) return;
+    const group = document.createElement('div');
+    group.className = 'model-group';
+    const header = document.createElement('div');
+    header.className = 'model-group-header' + (model.collapsed ? ' collapsed' : '');
+    header.innerHTML = `<span class="model-chevron">▼</span> <span>📦 ${escHtml(model.name)}</span><span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:auto">${partIdxs.length} parts</span>`;
+    header.onclick = () => { model.collapsed = !model.collapsed; buildSpriteList(); };
+    header.oncontextmenu = (e) => { e.preventDefault(); showModelContextMenu(e, model.id); };
+    group.appendChild(header);
+    if (!model.collapsed) {
+      const partsDiv = document.createElement('div');
+      partsDiv.className = 'model-group-parts';
+      partIdxs.forEach(i => partsDiv.appendChild(makeSpriteRow(i)));
+      group.appendChild(partsDiv);
+    }
+    el.appendChild(group);
+  });
+
+  // Render ungrouped parts
+  ungrouped.forEach(i => el.appendChild(makeSpriteRow(i)));
+
   buildSpriteSettings();
+  updateScriptLock();
+}
+
+// ── Script lock overlay ──
+function updateScriptLock() {
+  const spr = sprites[selectedSprite];
+  const overlay = document.getElementById('scriptLockOverlay');
+  if (!overlay) return;
+  const locked = !spr || !spr.hasScript;
+  overlay.style.display = locked ? 'flex' : 'none';
+  // Also dim palette when locked
+  const palette = document.getElementById('palette');
+  if (palette) palette.style.opacity = locked ? '0.4' : '1';
+  if (palette) palette.style.pointerEvents = locked ? 'none' : 'all';
+}
+
+function ctxAddScriptForSelected() {
+  if (selectedSprite < 0 || selectedSprite >= sprites.length) return;
+  sprites[selectedSprite].hasScript = true;
+  buildSpriteList();
+  showToast('📜 Script added to ' + sprites[selectedSprite].name);
+}
+
+// ── Right-click context menu ──
+let _ctxTargetIdx = -1;
+let _ctxTargetModelId = null;
+
+function showPartContextMenu(e, idx) {
+  _ctxTargetIdx = idx;
+  _ctxTargetModelId = null;
+  const spr = sprites[idx];
+  const menu = document.getElementById('partContextMenu');
+  // Show/hide items based on state
+  const allSelected = multiSelectedSprites.size > 1 || (multiSelectedSprites.size === 1 && !multiSelectedSprites.has(idx));
+  const canGroup = multiSelectedSprites.size > 1 || (multiSelectedSprites.size >= 1 && idx !== selectedSprite);
+  document.getElementById('ctxAddScript').style.display = (!spr.hasScript) ? 'flex' : 'none';
+  document.getElementById('ctxRemoveScript').style.display = spr.hasScript ? 'flex' : 'none';
+  document.getElementById('ctxGroup').style.display = canGroup ? 'flex' : 'none';
+  document.getElementById('ctxUngroup').style.display = spr.modelId ? 'flex' : 'none';
+  document.getElementById('ctxUnite').style.display = canGroup ? 'flex' : 'none';
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 190) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 260) + 'px';
+}
+
+function showModelContextMenu(e, modelId) {
+  _ctxTargetIdx = -1;
+  _ctxTargetModelId = modelId;
+  const menu = document.getElementById('partContextMenu');
+  document.getElementById('ctxAddScript').style.display = 'none';
+  document.getElementById('ctxRemoveScript').style.display = 'none';
+  document.getElementById('ctxGroup').style.display = 'none';
+  document.getElementById('ctxUngroup').style.display = 'flex';
+  document.getElementById('ctxUnite').style.display = 'flex';
+  menu.style.display = 'block';
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 190) + 'px';
+  menu.style.top = Math.min(e.clientY, window.innerHeight - 260) + 'px';
+}
+
+function hideContextMenu() {
+  document.getElementById('partContextMenu').style.display = 'none';
+}
+document.addEventListener('click', hideContextMenu);
+document.addEventListener('keydown', e => { if(e.key === 'Escape') hideContextMenu(); });
+
+function ctxAddScript() {
+  if (_ctxTargetIdx < 0 || _ctxTargetIdx >= sprites.length) return;
+  sprites[_ctxTargetIdx].hasScript = true;
+  saveSpriteBlocks();
+  selectedSprite = _ctxTargetIdx;
+  multiSelectedSprites.clear();
+  loadSpriteBlocks();
+  buildSpriteList();
+  showToast('📜 Script added to ' + sprites[_ctxTargetIdx].name);
+}
+
+function ctxRemoveScript() {
+  if (_ctxTargetIdx < 0 || _ctxTargetIdx >= sprites.length) return;
+  sprites[_ctxTargetIdx].hasScript = false;
+  spriteBlocksMap[_ctxTargetIdx] = [];
+  document.getElementById('scriptArea').querySelectorAll('.palette-block').forEach(e => e.remove());
+  updateHint();
+  buildSpriteList();
+  showToast('🚫 Script removed from ' + sprites[_ctxTargetIdx].name);
+}
+
+function ctxDelete() {
+  const idx = _ctxTargetIdx;
+  if (idx < 0 || idx >= sprites.length) return;
+  if (sprites.length <= 1) { showToast('⚠️ Need at least one part'); return; }
+  sprites.splice(idx, 1);
+  selectedSprite = Math.min(selectedSprite, sprites.length - 1);
+  multiSelectedSprites.clear();
+  buildSpriteList();
+}
+
+function ctxGroupAsModel() {
+  // Collect all selected indices
+  const toGroup = new Set(multiSelectedSprites);
+  if (_ctxTargetIdx >= 0) toGroup.add(_ctxTargetIdx);
+  toGroup.add(selectedSprite);
+  if (toGroup.size < 2) { showToast('⚠️ Select 2+ parts to group'); return; }
+  const modelId = 'model_' + Date.now();
+  const modelName = prompt('Model name:', 'Model ' + (models.length + 1));
+  if (!modelName) return;
+  models.push({ id: modelId, name: modelName.trim(), collapsed: false });
+  toGroup.forEach(i => { if (sprites[i]) sprites[i].modelId = modelId; });
+  multiSelectedSprites.clear();
+  buildSpriteList();
+  showToast('📦 Grouped as "' + modelName.trim() + '"');
+}
+
+function ctxUngroupModel() {
+  const modelId = _ctxTargetModelId || (sprites[_ctxTargetIdx] && sprites[_ctxTargetIdx].modelId);
+  if (!modelId) return;
+  sprites.forEach(s => { if (s.modelId === modelId) delete s.modelId; });
+  models = models.filter(m => m.id !== modelId);
+  buildSpriteList();
+  showToast('🔓 Ungrouped model');
+}
+
+function ctxUnite() {
+  // Merge all selected/grouped parts into one combined part
+  const toUnite = new Set(multiSelectedSprites);
+  if (_ctxTargetIdx >= 0) toUnite.add(_ctxTargetIdx);
+  if (_ctxTargetModelId) {
+    sprites.forEach((s, i) => { if (s.modelId === _ctxTargetModelId) toUnite.add(i); });
+  }
+  toUnite.add(selectedSprite);
+  if (toUnite.size < 2) { showToast('⚠️ Select 2+ parts to unite'); return; }
+  const idxArr = [...toUnite].sort((a, b) => a - b);
+  const base = sprites[idxArr[0]];
+  // Average position
+  let ax = 0, ay = 0;
+  idxArr.forEach(i => { ax += sprites[i].x; ay += sprites[i].y; });
+  ax /= idxArr.length; ay /= idxArr.length;
+  // Biggest hitbox
+  let mw = 0, mh = 0;
+  idxArr.forEach(i => { mw = Math.max(mw, sprites[i].hitbox?.w || 16); mh = Math.max(mh, sprites[i].hitbox?.h || 16); });
+  const unitedName = prompt('Name for united part:', 'United Part');
+  if (!unitedName) return;
+  const united = {
+    name: unitedName.trim(),
+    x: ax, y: ay,
+    color: base.color,
+    size: 1, visible: true, saying: '', solid: base.solid,
+    isSpawn: false, gravity: base.gravity,
+    hitbox: { w: mw, h: mh },
+    sprW: mw, sprH: mh,
+    hasScript: idxArr.some(i => sprites[i].hasScript),
+  };
+  // Remove united sprites (in reverse order to preserve indices)
+  idxArr.slice().reverse().forEach(i => sprites.splice(i, 1));
+  sprites.unshift(united); // put at top
+  // Clean up model refs
+  models = models.filter(m => sprites.some(s => s.modelId === m.id));
+  selectedSprite = 0;
+  multiSelectedSprites.clear();
+  buildSpriteList();
+  showToast('🔗 United into "' + unitedName.trim() + '"');
 }
 
 function buildSpriteSettings() {
@@ -4113,6 +4369,18 @@ if (currentUser) {
   document.getElementById('authScreen').style.display = 'flex';
 }
 </script>
+<!-- Right-click context menu for parts -->
+<div id="partContextMenu">
+  <div class="ctx-item" id="ctxAddScript" onclick="ctxAddScript()">📜 Add Script</div>
+  <div class="ctx-item" id="ctxRemoveScript" onclick="ctxRemoveScript()">🚫 Remove Script</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctxGroup" onclick="ctxGroupAsModel()">📦 Group as Model</div>
+  <div class="ctx-item" id="ctxUngroup" onclick="ctxUngroupModel()">🔓 Ungroup</div>
+  <div class="ctx-item" id="ctxUnite" onclick="ctxUnite()">🔗 Unite Parts</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" onclick="ctxDelete()">🗑 Delete Part</div>
+</div>
+
 <!-- Sprite Pixel Art Editor Modal -->
 <div id="pixelDrawModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);align-items:center;justify-content:center">
   <div style="background:#252525;border-radius:14px;padding:20px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.7)">
