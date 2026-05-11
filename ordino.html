@@ -522,7 +522,7 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
     </div>
     <div id="rightPanel">
       <div class="right-tabs">
-        <button class="right-tab active" id="tabSprites" onclick="switchRightTab('sprites')">Sprites</button>
+        <button class="right-tab active" id="tabSprites" onclick="switchRightTab('sprites')">Parts</button>
         <button class="right-tab" id="tabSettings" onclick="switchRightTab('settings')">Game Settings</button>
       </div>
       <!-- Sprites pane -->
@@ -532,9 +532,9 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
           <canvas id="stageCanvas" width="276" height="180"></canvas>
         </div>
         <div id="spritePanel">
-          <h3>Sprites</h3>
+          <h3>Parts</h3>
           <div id="spriteList"></div>
-          <button id="addSpriteBtn">+ Add Sprite</button>
+          <button id="addSpriteBtn">+ Add Part</button>
           <div id="spriteSettings"></div>
         </div>
       </div>
@@ -3430,7 +3430,7 @@ async function executeBlocks() {
       case 'stop': isRunning=false; break;
       case 'play_sound': if(p.sound==='boing')playBoing();else if(p.sound==='boom')playBoom();else playTone(600,0.12,'sine'); break;
       case 'touch_set_player': showToast('👆 Interact: sets player ' + (p.prop||'speed') + ' to ' + (p.val||0) + ' when touched in game'); break;
-      case 'touch_trigger': showToast('👆 Interact: triggers when player touches this sprite in game'); break;
+      case 'touch_trigger': showToast('👆 Interact: triggers when player touches this part in game'); break;
       case 'player_join': showToast('👤 Runs when a player joins the game'); break;
       case 'players_join': showToast('👥 Runs when other players join the game'); break;
       case 'start_anim': {
@@ -3637,7 +3637,7 @@ function buildSpriteSettings() {
       <span style="color:rgba(255,255,255,.35);font-size:.7rem;margin-left:6px">px</span>
     </div>
     <button class="spr-hitbox-btn" onclick="openHitboxEditor()">⬜ Edit Hitbox</button>
-    ${spr.name !== 'Spawn' ? `<button class="spr-hitbox-btn" onclick="openSpriteDrawer()" style="margin-top:6px;background:rgba(124,77,255,.18);border-color:rgba(124,77,255,.5)">🎨 Draw Sprite</button>` : ''}
+    ${spr.name !== 'Spawn' ? `<button class="spr-hitbox-btn" onclick="openSpriteDrawer()" style="margin-top:6px;background:rgba(124,77,255,.18);border-color:rgba(124,77,255,.5)">🎨 Draw Part</button>` : ''}
     ${spr.name !== 'Spawn' ? `
     <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
@@ -3674,8 +3674,8 @@ function buildSpriteSettings() {
       <span class="spr-setting-label">Name</span>
       <input type="text" value="${spr.name}" onchange="renameSprite(this.value)" style="flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:5px;padding:8px;color:#fff;font-size:.9rem;outline:none;min-height:44px">
     </div>
-    <button class="spr-hitbox-btn" onclick="copySprite()" style="margin-top:8px;background:rgba(33,150,243,.15);border-color:rgba(33,150,243,.5);color:#42a5f5">📋 Copy Sprite</button>
-    <button class="spr-hitbox-btn" onclick="deleteSprite()" style="margin-top:8px;background:rgba(229,57,53,.15);border-color:rgba(229,57,53,.5);color:#ef5350">🗑 Delete Sprite</button>
+    <button class="spr-hitbox-btn" onclick="copySprite()" style="margin-top:8px;background:rgba(33,150,243,.15);border-color:rgba(33,150,243,.5);color:#42a5f5">📋 Copy Part</button>
+    <button class="spr-hitbox-btn" onclick="deleteSprite()" style="margin-top:8px;background:rgba(229,57,53,.15);border-color:rgba(229,57,53,.5);color:#ef5350">🗑 Delete Part</button>
   `;
 }
 
@@ -3702,12 +3702,12 @@ function copySprite() {
   sprites.push(copy);
   selectedSprite = sprites.length - 1;
   buildSpriteList();
-  showToast('📋 Sprite copied!');
+  showToast('📋 Part copied!');
 }
 
 function deleteSprite() {
   if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
-  if(sprites.length <= 1) { showToast('⚠️ Need at least one sprite'); return; }
+  if(sprites.length <= 1) { showToast('⚠️ Need at least one part'); return; }
   sprites.splice(selectedSprite, 1);
   selectedSprite = Math.min(selectedSprite, sprites.length - 1);
   buildSpriteList();
@@ -4095,7 +4095,7 @@ function drawSpritePixels(ctx, pixels, x, y, w, h, cols) {
 
 document.getElementById('addSpriteBtn').addEventListener('click',()=>{
   const colors=['#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa','#00acc1'];
-  sprites.push({name:'Sprite'+(sprites.length+1),x:100+Math.random()*80,y:70+Math.random()*40,color:colors[sprites.length%colors.length],size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,sprW:16,sprH:16,hitbox:{w:16,h:16}});
+  sprites.push({name:'Part'+(sprites.length+1),x:100+Math.random()*80,y:70+Math.random()*40,color:colors[sprites.length%colors.length],size:1,visible:true,saying:'',solid:true,isSpawn:false,gravity:false,sprW:16,sprH:16,hitbox:{w:16,h:16}});
   buildSpriteList();
 });
 
@@ -4116,7 +4116,7 @@ if (currentUser) {
 <!-- Sprite Pixel Art Editor Modal -->
 <div id="pixelDrawModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.82);align-items:center;justify-content:center">
   <div style="background:#252525;border-radius:14px;padding:20px;width:380px;box-shadow:0 8px 40px rgba(0,0,0,.7)">
-    <h3 style="color:#eee;margin:0 0 12px;font-size:.95rem">🎨 Draw Sprite</h3>
+    <h3 style="color:#eee;margin:0 0 12px;font-size:.95rem">🎨 Draw Part</h3>
     <canvas id="pixelCanvas" width="320" height="320"
       style="width:320px;height:320px;display:block;margin:0 auto 12px;image-rendering:pixelated;border-radius:6px;cursor:crosshair;touch-action:none;border:2px solid rgba(255,255,255,.1)"
       onpointerdown="pixelCanvasDown(event)" onpointermove="pixelCanvasMove(event)"
