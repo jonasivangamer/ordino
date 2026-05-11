@@ -180,12 +180,15 @@ select.setting-select{background:#333;color:#fff;border:1px solid #555;border-ra
 .model-group-header.collapsed .model-chevron{transform:rotate(-90deg)}
 .model-group-parts{padding:4px 4px 4px 18px}
 .model-group-parts .sprite-item{margin-bottom:4px}
-/* Scripted part wrapper — same card style as model group but purple */
-.script-group{margin-bottom:8px;border:1px solid rgba(124,77,255,.45);border-radius:8px;overflow:hidden}
-.script-group-header{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(124,77,255,.12);cursor:pointer;font-size:.82rem;color:#b388ff;font-weight:700}
-.script-group-header .model-chevron{font-size:.65rem;transition:.2s}
+/* Part card — every part is a collapsible card, Script lives inside */
+.script-group{margin-bottom:8px;border:1px solid rgba(255,255,255,.12);border-radius:8px;overflow:hidden;transition:.15s}
+.script-group.part-selected{border-color:#7c4dff}
+.script-group.part-multi{border-color:#ff8c00}
+.script-group-header{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(255,255,255,.05);cursor:pointer;font-size:.82rem;color:#ddd;font-weight:700}
+.script-group-header:hover{background:rgba(255,255,255,.09)}
+.script-group-header .model-chevron{font-size:.65rem;transition:.2s;color:rgba(255,255,255,.4)}
 .script-group-header.collapsed .model-chevron{transform:rotate(-90deg)}
-.script-group-body{padding:4px 4px 4px 4px}
+.script-group-body{padding:4px 6px 6px 6px;display:flex;flex-direction:column;gap:4px}
 /* Right-click context menu */
 #partContextMenu{position:fixed;z-index:99999;background:#252525;border:1px solid rgba(255,255,255,.18);border-radius:10px;padding:6px 0;min-width:170px;box-shadow:0 8px 32px rgba(0,0,0,.7);display:none}
 #partContextMenu .ctx-item{padding:9px 16px;color:#eee;font-size:.85rem;cursor:pointer;display:flex;align-items:center;gap:8px;transition:.12s}
@@ -3652,60 +3655,67 @@ function buildSpriteList() {
 
   function makeSpriteRow(i) {
     const s = sprites[i];
-    const row = document.createElement('div');
     const isPrimary = i === selectedSprite;
     const isMulti = multiSelectedSprites.has(i);
-    row.className = 'sprite-item' + (isPrimary ? ' selected' : isMulti ? ' multi-selected' : '');
-    row.innerHTML = `
-      <div class="sprite-swatch" style="background:${s.color}"></div>
-      <div class="sprite-info">
-        <div class="sprite-name">${escHtml(s.name)}</div>
-        <div class="sprite-coords">x:${Math.round(s.x-138)} y:${Math.round(s.y-90)}</div>
-      </div>`;
-    row.onclick = (e) => {
+    const collapsed = scriptCollapsed[i] || false;
+
+    // Every part is rendered as a card (like a model) — the part is the container,
+    // and Script is a child item inside it when hasScript is true.
+    const card = document.createElement('div');
+    card.className = 'script-group' + (isPrimary ? ' part-selected' : isMulti ? ' part-multi' : '');
+
+    // Part header (like model header)
+    const hdr = document.createElement('div');
+    hdr.className = 'script-group-header' + (collapsed ? ' collapsed' : '');
+    hdr.innerHTML = `<span class="model-chevron">▼</span> <span style="flex:1">${escHtml(s.name)}</span><div class="sprite-swatch" style="background:${s.color};width:14px;height:14px;border-radius:3px;flex-shrink:0"></div>`;
+    hdr.onclick = (e) => {
       if (e.shiftKey) {
         if (multiSelectedSprites.has(i)) multiSelectedSprites.delete(i);
         else multiSelectedSprites.add(i);
-        buildSpriteList();
       } else {
-        saveSpriteBlocks();
-        selectedSprite = i;
-        multiSelectedSprites.clear();
-        loadSpriteBlocks();
-        buildSpriteList();
-        updateScriptLock();
+        selectedSprite = i; multiSelectedSprites.clear();
+        scriptCollapsed[i] = !collapsed;
       }
+      buildSpriteList();
     };
-    row.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+    hdr.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+    card.appendChild(hdr);
 
-    // If this part has a script, wrap it in a styled card like a model
-    if (s.hasScript) {
-      const collapsed = scriptCollapsed[i] || false;
-      const card = document.createElement('div');
-      card.className = 'script-group';
-      const hdr = document.createElement('div');
-      hdr.className = 'script-group-header' + (collapsed ? ' collapsed' : '');
-      hdr.innerHTML = `<span class="model-chevron">▼</span> <span>📜 ${escHtml(s.name)}</span><span style="color:rgba(255,255,255,.3);font-size:.7rem;margin-left:auto">script</span>`;
-      hdr.onclick = (e) => {
-        // Header click toggles collapse; also selects the part
-        if (!e.shiftKey) {
-          saveSpriteBlocks(); selectedSprite = i; multiSelectedSprites.clear();
-          loadSpriteBlocks(); updateScriptLock();
-        }
-        scriptCollapsed[i] = !scriptCollapsed[i];
-        buildSpriteList();
-      };
-      hdr.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
-      card.appendChild(hdr);
-      if (!collapsed) {
-        const body = document.createElement('div');
-        body.className = 'script-group-body';
-        body.appendChild(row);
-        card.appendChild(body);
+    if (!collapsed) {
+      const body = document.createElement('div');
+      body.className = 'script-group-body';
+
+      // Script child item inside the part card
+      if (s.hasScript) {
+        const scriptRow = document.createElement('div');
+        const isScriptActive = isPrimary;
+        scriptRow.className = 'sprite-item' + (isScriptActive ? ' selected' : '');
+        scriptRow.style.cssText = 'gap:6px;padding:6px 10px;background:rgba(124,77,255,.1);border-color:' + (isScriptActive ? '#7c4dff' : 'transparent');
+        scriptRow.innerHTML = `<span style="font-size:.9rem">📜</span><div class="sprite-info"><div class="sprite-name" style="color:#b388ff">Script</div><div class="sprite-coords">click to code</div></div>`;
+        scriptRow.onclick = (e) => {
+          e.stopPropagation();
+          saveSpriteBlocks();
+          selectedSprite = i;
+          multiSelectedSprites.clear();
+          loadSpriteBlocks();
+          buildSpriteList();
+          updateScriptLock();
+        };
+        scriptRow.oncontextmenu = (e) => { e.preventDefault(); showPartContextMenu(e, i); };
+        body.appendChild(scriptRow);
+      } else {
+        // No script — show "Add Script" row
+        const addRow = document.createElement('div');
+        addRow.className = 'sprite-item';
+        addRow.style.cssText = 'gap:6px;padding:6px 10px;border:1px dashed rgba(124,77,255,.3);opacity:.6;';
+        addRow.innerHTML = `<span style="font-size:.9rem">➕</span><div class="sprite-info"><div class="sprite-name" style="color:rgba(180,136,255,.7)">Add Script</div><div class="sprite-coords">right-click part</div></div>`;
+        body.appendChild(addRow);
       }
-      return card;
+
+      card.appendChild(body);
     }
-    return row;
+
+    return card;
   }
 
   // Render model groups first
